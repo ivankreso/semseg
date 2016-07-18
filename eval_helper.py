@@ -11,7 +11,7 @@ import skimage.io
 def draw_output(y, class_colors, save_path):
   width = y.shape[1]
   height = y.shape[0]
-  y_rgb = np.empty((height, width, 3), dtype=np.uint8)
+  y_rgb = np.zeros((height, width, 3), dtype=np.uint8)
   for cid in range(len(class_colors)):
     cpos = np.repeat((y == cid).reshape((height, width, 1)), 3, axis=2)
     cnum = cpos.sum() // 3
@@ -84,10 +84,10 @@ def compute_errors(conf_mat, name, class_info, verbose=True):
   avg_class_recall = class_recall.mean()
   avg_class_precision = class_precision.mean()
   if verbose:
-    print(name + ' pixel accuracy = %.2f %%' % avg_pixel_acc)
     print(name + ' IoU mean class accuracy - TP / (TP+FN+FP) = %.2f %%' % avg_class_iou)
     print(name + ' mean class recall - TP / (TP+FN) = %.2f %%' % avg_class_recall)
     print(name + ' mean class precision - TP / (TP+FP) = %.2f %%' % avg_class_precision)
+    print(name + ' pixel accuracy = %.2f %%' % avg_pixel_acc)
   return avg_pixel_acc, avg_class_iou, avg_class_recall, avg_class_precision, total_size
 
 def plot_training_progress(save_dir, loss, iou, pixel_acc):

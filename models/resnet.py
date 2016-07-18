@@ -92,8 +92,8 @@ def inference(x, is_training,
 
     with tf.variable_scope('scale2'):
         # TODO k was 3
-        #x = _max_pool(x, ksize=3, stride=2)
-        x = _max_pool(x, ksize=2, stride=2)
+        x = _max_pool(x, ksize=3, stride=2)
+        #x = _max_pool(x, ksize=2, stride=2)
         c['num_blocks'] = num_blocks[0]
         c['stack_stride'] = 1
         c['block_filters_internal'] = 64
@@ -131,36 +131,47 @@ def inference(x, is_training,
       }
       with scopes.arg_scope([ops.conv2d], stddev=CONV_WEIGHT_STDDEV, is_training=is_training,
                             weight_decay=CONV_WEIGHT_DECAY):
-        with scopes.arg_scope([ops.conv2d], batch_norm_params=bn_params):
-          ##x = convolve(x, 512, 7, 'conv6_1')
-          ## 5x5 much faster then 7x7
-          #pad = [[0, 0], [0, 0]]
-          ## set rate=8 with 3x3
-          #rate = 2
-          #x = tf.space_to_batch(x, paddings=pad, block_size=rate)
-          #x = convolve(x, 512, 5, 'conv6_1')
-          #x = convolve(x, 512, 3, 'conv6_2')
-          ##x = convolve(x, 512, 1, 'conv6_3')
-          #x = tf.batch_to_space(x, crops=pad, block_size=rate)
 
-          aspp_rates = [None, 6, 12]
-          aspp_branches = []
-          for i, r in enumerate(aspp_rates):
-            aspp_branches += [convolve(x, 512, 5, 'conv6_1_branch_' + str(i), dilation=r)]
-            #aspp_branches += [convolve(x, 512, 3, 'conv6_1_branch_' + str(i), dilation=r)]
+        #aspp_rates = [None, 6, 12]
+        aspp_rates = [None, 2, 4]
+        aspp_branches = []
+        with tf.variable_scope('classifier') as scope:
+          with scopes.arg_scope([ops.conv2d], batch_norm_params=bn_params):
+            ##x = convolve(x, 512, 7, 'conv6_1')
+            ## 5x5 much faster then 7x7
+            #pad = [[0, 0], [0, 0]]
+            ## set rate=8 with 3x3
+            #rate = 2
             #x = tf.space_to_batch(x, paddings=pad, block_size=rate)
             #x = convolve(x, 512, 5, 'conv6_1')
             #x = convolve(x, 512, 3, 'conv6_2')
             ##x = convolve(x, 512, 1, 'conv6_3')
             #x = tf.batch_to_space(x, crops=pad, block_size=rate)
-          x = tf.add_n(aspp_branches)
+            for i, r in enumerate(aspp_rates):
+              #aspp_branches += [convolve(x, 512, 5, 'conv6_1_branch_' + str(i), dilation=r)]
+              #aspp_branches += [convolve(x, 512, 5, 'conv6_1', dilation=r)]
 
-          #x = fc(x, c)
+              conv6 = convolve(x, 512, 5, 'conv6_1', dilation=r)
+              aspp_branches += [convolve(conv6, num_classes, 1, 'score', activation=None)]
+              scope.reuse_variables()
 
-        x = convolve(x, num_classes, 1, 'score', activation=None)
-        #x = convolve(x, num_classes, 1, 'score', activation=None)
-        x = tf.image.resize_bilinear(x, [FLAGS.img_height, FLAGS.img_width],
-                                     name='resize_score')
+              #conv6 = convolve(x, 512, 5, 'conv6_1_branch_'+str(i), dilation=r)
+              #aspp_branches += [convolve(conv6, num_classes, 1, 'score_branch'+str(i), activation=None)]
+
+              #aspp_branches += [convolve(x, 512, 3, 'conv6_1_branch_' + str(i), dilation=r)]
+              #x = tf.space_to_batch(x, paddings=pad, block_size=rate)
+              #x = convolve(x, 512, 5, 'conv6_1')
+              #x = convolve(x, 512, 3, 'conv6_2')
+              ##x = convolve(x, 512, 1, 'conv6_3')
+              #x = tf.batch_to_space(x, crops=pad, block_size=rate)
+            x = tf.add_n(aspp_branches)
+
+            #x = fc(x, c)
+
+          #x = convolve(x, num_classes, 1, 'score', activation=None)
+          #x = convolve(x, num_classes, 1, 'score', activation=None)
+          x = tf.image.resize_bilinear(x, [FLAGS.img_height, FLAGS.img_width],
+                                       name='resize_score')
 
     return x
 

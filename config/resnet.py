@@ -24,18 +24,18 @@ DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
                            '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 
 
-#tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
-## 1e-4 best, 1e-3 is too big
-#tf.app.flags.DEFINE_float('initial_learning_rate', 1e-4, '')
-#tf.app.flags.DEFINE_float('num_epochs_per_decay', 3.0, '')
+tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
+# 1e-4 best, 1e-3 is too big
+tf.app.flags.DEFINE_float('initial_learning_rate', 1e-4, '')
+tf.app.flags.DEFINE_float('num_epochs_per_decay', 3.0, '')
 
-tf.app.flags.DEFINE_string('optimizer', 'Momentum', '')
-#tf.app.flags.DEFINE_float('initial_learning_rate', 2e-4,
-# 1e-2 is to big
-tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, """Initial learning rate.""")
-tf.app.flags.DEFINE_float('momentum', 0.9, '')
-tf.app.flags.DEFINE_float('num_epochs_per_decay', 3.0,
-                          """Epochs after which learning rate decays.""")
+#tf.app.flags.DEFINE_string('optimizer', 'Momentum', '')
+## 1e-2 is to big
+#tf.app.flags.DEFINE_float('initial_learning_rate', 2e-4, '')
+##tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, """Initial learning rate.""")
+#tf.app.flags.DEFINE_float('momentum', 0.9, '')
+#tf.app.flags.DEFINE_float('num_epochs_per_decay', 3.0,
+#                          """Epochs after which learning rate decays.""")
 
 
 tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.5,

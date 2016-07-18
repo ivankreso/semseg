@@ -249,8 +249,7 @@ def conv2d(inputs,
                                  regularizer=l2_regularizer,
                                  trainable=trainable,
                                  restore=restore)
-
-    if dilation == None:
+    if dilation == None or dilation == 1:
       conv = tf.nn.conv2d(inputs, weights, [1, stride_h, stride_w, 1],
                           padding=padding)
     else:

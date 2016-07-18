@@ -4,7 +4,8 @@ import train_helper
 
 #MODEL_PATH = './models/six_blocks.py'
 #MODEL_PATH = './models/dilated_multiscale.py'
-MODEL_PATH = './models/baseline.py'
+#MODEL_PATH = './models/baseline.py'
+MODEL_PATH = './models/vgg.py'
 #MODEL_PATH = './models/all_dilated.py'
 #MODEL_PATH = './models/dilated_conv.py'
 #MODEL_PATH = './models/multiscale_pyramid.py'
