@@ -16,10 +16,10 @@ SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets', train_helpe
 #IMG_HEIGHT = 1024
 #DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
-#IMG_WIDTH = 640
-#IMG_HEIGHT = 288
-IMG_WIDTH = 1024
-IMG_HEIGHT = 448
+IMG_WIDTH = 640
+IMG_HEIGHT = 288
+#IMG_WIDTH = 1024
+#IMG_HEIGHT = 448
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
                            '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 

@@ -32,14 +32,28 @@ VARIABLES_TO_RESTORE = 'resnet_variables_to_restore'
 IMAGENET_MEAN_BGR = [103.062623801, 115.902882574, 123.151630838, ]
 MEAN_RGB = [123.151630838, 115.902882574, 103.062623801]
 
+BN_PARAMS = {
+    # Decay for the moving averages.
+    'decay': BN_DECAY,
+    # epsilon to prevent 0s in variance.
+    'epsilon': BN_EPSILON,
+    #'center': False,
+    #'scale': False,
+    'center': True,
+    #'scale': True
+    'scale': False
+}
+
 activation = tf.nn.relu
 
 
 def variables_to_restore():
     return tf.get_collection(RESNET_VARIABLES)
 
+
 def normalize_input(rgb):
-    """Changes RGB [0,1] valued image to BGR [0,255] with mean subtracted."""
+  """Changes RGB [0,1] valued image to BGR [0,255] with mean subtracted."""
+  with tf.name_scope('input'), tf.device('/cpu:0'):
     red, green, blue = tf.split(3, 3, rgb)
     bgr = tf.concat(3, [blue, green, red])
     bgr -= IMAGENET_MEAN_BGR
@@ -86,13 +100,12 @@ def inference(x, is_training,
         x = bn(x, c)
         x = activation(x)
         # TODO added one more conv
-        #x = conv(x, c)
-        #x = bn(x, c)
-        #x = activation(x)
+        with scopes.arg_scope([ops.conv2d], batch_norm_params=BN_PARAMS):
+          x = convolve(x, 64, 7, 'conv2', stride=2)
 
     with tf.variable_scope('scale2'):
         # TODO k was 3
-        x = _max_pool(x, ksize=3, stride=2)
+        #x = _max_pool(x, ksize=3, stride=2)
         #x = _max_pool(x, ksize=2, stride=2)
         c['num_blocks'] = num_blocks[0]
         c['stack_stride'] = 1
@@ -121,50 +134,44 @@ def inference(x, is_training,
     #x = tf.reduce_mean(x, reduction_indices=[1, 2], name="avg_pool")
 
     with tf.variable_scope('score'):
-      bn_params = {
-          # Decay for the moving averages.
-          'decay': 0.999,
-          # epsilon to prevent 0s in variance.
-          'epsilon': 0.001,
-          'center': False,
-          'scale': False,
-      }
       with scopes.arg_scope([ops.conv2d], stddev=CONV_WEIGHT_STDDEV, is_training=is_training,
                             weight_decay=CONV_WEIGHT_DECAY):
 
         #aspp_rates = [None, 6, 12]
-        aspp_rates = [None, 2, 4]
+        #aspp_rates = [None, 2, 4]
+        aspp_rates = [2]
         aspp_branches = []
         with tf.variable_scope('classifier') as scope:
-          with scopes.arg_scope([ops.conv2d], batch_norm_params=bn_params):
-            ##x = convolve(x, 512, 7, 'conv6_1')
-            ## 5x5 much faster then 7x7
-            #pad = [[0, 0], [0, 0]]
-            ## set rate=8 with 3x3
-            #rate = 2
+          ##x = convolve(x, 512, 7, 'conv6_1')
+          ## 5x5 much faster then 7x7
+          #pad = [[0, 0], [0, 0]]
+          ## set rate=8 with 3x3
+          #rate = 2
+          #x = tf.space_to_batch(x, paddings=pad, block_size=rate)
+          #x = convolve(x, 512, 5, 'conv6_1')
+          #x = convolve(x, 512, 3, 'conv6_2')
+          ##x = convolve(x, 512, 1, 'conv6_3')
+          #x = tf.batch_to_space(x, crops=pad, block_size=rate)
+          for i, r in enumerate(aspp_rates):
+            #aspp_branches += [convolve(x, 512, 5, 'conv6_1_branch_' + str(i), dilation=r)]
+            #aspp_branches += [convolve(x, 512, 5, 'conv6_1', dilation=r)]
+            with scopes.arg_scope([ops.conv2d], batch_norm_params=BN_PARAMS):
+              conv6 = convolve(x, 512, 5, 'conv6_1', dilation=r)
+              conv6 = convolve(conv6, 512, 3, 'conv6_2')
+            aspp_branches += [convolve(conv6, num_classes, 1, 'score', activation=None)]
+            #TODO try without reuse
+            scope.reuse_variables()
+
+            #conv6 = convolve(x, 512, 5, 'conv6_1_branch_'+str(i), dilation=r)
+            #aspp_branches += [convolve(conv6, num_classes, 1, 'score_branch'+str(i), activation=None)]
+
+            #aspp_branches += [convolve(x, 512, 3, 'conv6_1_branch_' + str(i), dilation=r)]
             #x = tf.space_to_batch(x, paddings=pad, block_size=rate)
             #x = convolve(x, 512, 5, 'conv6_1')
             #x = convolve(x, 512, 3, 'conv6_2')
             ##x = convolve(x, 512, 1, 'conv6_3')
             #x = tf.batch_to_space(x, crops=pad, block_size=rate)
-            for i, r in enumerate(aspp_rates):
-              #aspp_branches += [convolve(x, 512, 5, 'conv6_1_branch_' + str(i), dilation=r)]
-              #aspp_branches += [convolve(x, 512, 5, 'conv6_1', dilation=r)]
-
-              conv6 = convolve(x, 512, 5, 'conv6_1', dilation=r)
-              aspp_branches += [convolve(conv6, num_classes, 1, 'score', activation=None)]
-              scope.reuse_variables()
-
-              #conv6 = convolve(x, 512, 5, 'conv6_1_branch_'+str(i), dilation=r)
-              #aspp_branches += [convolve(conv6, num_classes, 1, 'score_branch'+str(i), activation=None)]
-
-              #aspp_branches += [convolve(x, 512, 3, 'conv6_1_branch_' + str(i), dilation=r)]
-              #x = tf.space_to_batch(x, paddings=pad, block_size=rate)
-              #x = convolve(x, 512, 5, 'conv6_1')
-              #x = convolve(x, 512, 3, 'conv6_2')
-              ##x = convolve(x, 512, 1, 'conv6_3')
-              #x = tf.batch_to_space(x, crops=pad, block_size=rate)
-            x = tf.add_n(aspp_branches)
+          x = tf.add_n(aspp_branches)
 
             #x = fc(x, c)
 

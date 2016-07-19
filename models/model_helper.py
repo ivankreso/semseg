@@ -8,18 +8,14 @@ import np_helper
 FLAGS = tf.app.flags.FLAGS
 
 def convolve(inputs, num_maps, k, name, init_layers=None, activation=tf.nn.relu,
-             dilation=None, wgt_decay=None):
+             dilation=None, stride=1):
   if init_layers != None:
     init_map = {'weights':init_layers[name + '/weights'],
                 'biases':init_layers[name + '/biases']}
   else:
     init_map = None
-  if wgt_decay:
-    return ops.conv2d(inputs, num_maps, [k, k], scope=name, init=init_map, activation=activation,
-                      seed=FLAGS.seed, weight_decay=wgt_decay, dilation=dilation)
-  else:
-    return ops.conv2d(inputs, num_maps, [k, k], scope=name, init=init_map, activation=activation,
-                      seed=FLAGS.seed, dilation=dilation)
+  return ops.conv2d(inputs, num_maps, [k, k], scope=name, init=init_map, activation=activation,
+                    seed=FLAGS.seed, dilation=dilation, stride=stride)
 
 
 def _read_conv_params(in_dir, name):

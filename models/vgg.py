@@ -33,8 +33,10 @@ def build(inputs, labels, weights, num_labels, is_training=True):
       'decay': 0.999,
       # epsilon to prevent 0s in variance.
       'epsilon': 0.001,
-      'center': False,
-      'scale': False,
+      #'center': False,
+      #'scale': False,
+      'center': True,
+      'scale': True,
   }
   num_classes = FLAGS.num_classes
   # best so far = 0.0005
@@ -62,9 +64,9 @@ def build(inputs, labels, weights, num_labels, is_training=True):
       net = convolve(net, conv5_sz, k, 'conv5_2', vgg_layers)
       net = convolve(net, conv5_sz, k, 'conv5_3', vgg_layers)
 
-      aspp_rates = [None, 2, 4]
+      #aspp_rates = [None, 2, 4]
       filter_size = 5
-      #aspp_rates = [2]
+      aspp_rates = [2]
       #filter_size = 7
       aspp_branches = []
       with tf.variable_scope('classifier') as scope:

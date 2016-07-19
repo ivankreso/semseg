@@ -8,8 +8,13 @@ from models.model_helper import convolve, read_vgg_init
 
 FLAGS = tf.app.flags.FLAGS
 
+def normalize_input(image):
+  vgg_mean = tf.constant([123.68, 116.779, 103.939])
+  image -= vgg_mean
+  return image
 
-def inference(inputs, is_training=True):
+#def inference(inputs, is_training=True):
+def build(inputs, labels, weights, num_labels, is_training=True):
   if is_training:
     vgg_layers, vgg_layer_names = read_vgg_init(FLAGS.vgg_init_dir)
   else:
@@ -26,7 +31,8 @@ def inference(inputs, is_training=True):
       'decay': 0.999,
       # epsilon to prevent 0s in variance.
       'epsilon': 0.001,
-      'center': False,
+      #'center': False,
+      'center': True,
       'scale': False,
   }
   # best so far = 0.0005
@@ -44,24 +50,23 @@ def inference(inputs, is_training=True):
       net = ops.max_pool(net, [2, 2], scope='pool1')
       net = convolve(net, conv2_sz, k, 'conv2_1', vgg_layers)
       net = convolve(net, conv2_sz, k, 'conv2_2', vgg_layers)
+      net = ops.max_pool(net, [2, 2], scope='pool2')
 
-      #net = ops.max_pool(net, [2, 2], scope='pool2')
-
-      #net = tf.space_to_batch(net, paddings=pad, block_size=drate)
+      net = tf.space_to_batch(net, paddings=pad, block_size=drate)
       net = convolve(net, conv3_sz, k, 'conv3_1', vgg_layers)
       net = convolve(net, conv3_sz, k, 'conv3_2', vgg_layers)
       net = convolve(net, conv3_sz, k, 'conv3_3', vgg_layers)
-      #net = tf.batch_to_space(net, crops=pad, block_size=drate)
-      #drate *= 2
-      net = ops.max_pool(net, [2, 2], scope='pool3')
+      net = ops.max_pool(net, [2, 2], scope='pool3', stride=1, padding='SAME')
+      net = tf.batch_to_space(net, crops=pad, block_size=drate)
+      drate *= 2
 
       net = tf.space_to_batch(net, paddings=pad, block_size=drate)
       net = convolve(net, conv4_sz, k, 'conv4_1', vgg_layers)
       net = convolve(net, conv4_sz, k, 'conv4_2', vgg_layers)
       net = convolve(net, conv4_sz, k, 'conv4_3', vgg_layers)
+      net = ops.max_pool(net, [2, 2], scope='pool4', stride=1, padding='SAME')
       net = tf.batch_to_space(net, crops=pad, block_size=drate)
       drate *= 2
-      #net = ops.max_pool(net, [2, 2], scope='pool4')
       #pad = ...  # padding so that the input dims are multiples of rate
       #net = space_to_batch(net, paddings=pad, block_size=rate)
       #net = conv2d(net, filters1, strides=[1, 1, 1, 1], padding="SAME")
@@ -74,8 +79,9 @@ def inference(inputs, is_training=True):
       net = convolve(net, conv5_sz, k, 'conv5_1', vgg_layers)
       net = convolve(net, conv5_sz, k, 'conv5_2', vgg_layers)
       net = convolve(net, conv5_sz, k, 'conv5_3', vgg_layers)
-      net = tf.batch_to_space(net, crops=pad, block_size=drate)
-      drate *= 2
+      #net = tf.batch_to_space(net, crops=pad, block_size=drate)
+      #drate *= 2
+      #print(net.get_shape())
 
       # TODO do we need this
       #net = ops.max_pool(net, [2, 2], stride=1, scope='pool5')
@@ -93,8 +99,8 @@ def inference(inputs, is_training=True):
       #with scopes.arg_scope([ops.conv2d, ops.fc], batch_norm_params=bn_params, weight_decay=0.0005):
         #net = convolve(net, 1024, 3, 'conv6_1')
         #net = tf.nn.atrous_conv2d(net, [7, 7, 512, 1024], rate=4, padding="SAME", name='conv6_1')
-        net = tf.space_to_batch(net, paddings=pad, block_size=drate)
-        net = convolve(net, 768, 7, 'conv6_1')
+        #net = tf.space_to_batch(net, paddings=pad, block_size=drate)
+        net = convolve(net, 512, 7, 'conv6_1')
         #net = convolve(net, 512, 7, 'conv6_1')
         #net = convolve(net, 2048, 7, 'conv6_1')
         #net = convolve(net, 4096, 7, 'conv6_1')
@@ -105,8 +111,8 @@ def inference(inputs, is_training=True):
 
         #net = convolve(net, 1024, 7, 'conv6_1')
         net = convolve(net, 512, 3, 'conv6_2')
-        net = convolve(net, 512, 3, 'conv6_3')
-        net = convolve(net, 512, 1, 'fc7')
+        #net = convolve(net, 512, 3, 'conv6_3')
+        #net = convolve(net, 512, 1, 'fc7')
 
         #net = ops.conv2d(net, 1024, [1, 1], scope='conv5_4')
         #net = ops.conv2d(net, 512, [1, 1], scope='conv6_1')
@@ -118,9 +124,10 @@ def inference(inputs, is_training=True):
       #net = slim.ops.fc(net, 4096, scope='fc7')
       #net = slim.ops.dropout(net, 0.5, scope='dropout7')
       #net = slim.ops.fc(net, 1000, activation=None, scope='fc8')
-      logits_up = tf.image.resize_bilinear(net, [FLAGS.img_height, FLAGS.img_width],
+      logits = tf.image.resize_bilinear(net, [FLAGS.img_height, FLAGS.img_width],
                                            name='resize_scores')
-  return logits_up
+      loss_val = loss(logits, labels, weights, num_labels, is_training)
+  return logits, loss_val
 
 
 def loss(logits, labels, weights, num_labels, is_training=True):

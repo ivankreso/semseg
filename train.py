@@ -265,11 +265,11 @@ def train(model, train_dataset, valid_dataset):
             [train_iou_data, valid_iou_data], [train_pixacc_data, valid_pixacc_data])
 
       # Save the model checkpoint periodically.
-      if valid_iou >= max(valid_iou_data):
-        print('Saving model...')
-        checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
-        #saver.save(sess, checkpoint_path, global_step=epoch_num)
-        saver.save(sess, checkpoint_path)
+      #if valid_iou >= max(valid_iou_data):
+      #  print('Saving model...')
+      #  checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
+      #  #saver.save(sess, checkpoint_path, global_step=epoch_num)
+      #  saver.save(sess, checkpoint_path)
 
     #coord.request_stop()
     #coord.join(threads)
