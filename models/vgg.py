@@ -10,10 +10,22 @@ from models.model_helper import convolve, read_vgg_init
 FLAGS = tf.app.flags.FLAGS
 
 
-def normalize_input(image):
-  vgg_mean = tf.constant([123.68, 116.779, 103.939])
-  image -= vgg_mean
-  return image
+IMAGENET_MEAN_BGR = [103.939, 116.779, 123.68]
+
+# TODO
+#def normalize_input(image):
+#  vgg_mean = tf.constant([123.68, 116.779, 103.939])
+#  image -= vgg_mean
+#  return image
+
+def normalize_input(rgb):
+  """Changes RGB [0,1] valued image to BGR [0,255] with mean subtracted."""
+  with tf.name_scope('input'), tf.device('/cpu:0'):
+    red, green, blue = tf.split(3, 3, rgb)
+    bgr = tf.concat(3, [blue, green, red])
+    bgr -= IMAGENET_MEAN_BGR
+    return bgr
+
 
 #def inference(inputs, is_training=True):
 def build(inputs, labels, weights, num_labels, is_training=True):
@@ -36,7 +48,7 @@ def build(inputs, labels, weights, num_labels, is_training=True):
       #'center': False,
       #'scale': False,
       'center': True,
-      'scale': True,
+      'scale': False,
   }
   num_classes = FLAGS.num_classes
   # best so far = 0.0005

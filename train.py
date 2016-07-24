@@ -1,15 +1,12 @@
 import os
 import sys
 import time
-from datetime import datetime
 from shutil import copyfile
 #import subprocess
 
 import numpy as np
 import tensorflow as tf
-from tqdm import trange
-
-np.set_printoptions(linewidth=250)
+#from tqdm import trange
 
 import libs.cylib as cylib
 import helper
@@ -20,6 +17,7 @@ from datasets.cityscapes.cityscapes import CityscapesDataset
 #import datasets.reader_pyramid as reader
 import datasets.reader as reader
 
+np.set_printoptions(linewidth=250)
 
 tf.app.flags.DEFINE_string('config_path', '', """Path to experiment config.""")
 FLAGS = tf.app.flags.FLAGS
@@ -28,25 +26,40 @@ helper.import_module('config', FLAGS.config_path)
 print(FLAGS.config_path)
 
 
-def evaluate(sess, logits, loss, labels, img_name, dataset):
+def evaluate(sess, epoch_num, logits, loss, labels, img_name, dataset):
   """ Trains the network
     Args:
       sess: TF session
       logits: network logits
   """
+  print('\nValidation performance:')
   conf_mat = np.ascontiguousarray(
       np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64))
   loss_avg = 0
-  for i in trange(dataset.num_examples()):
-    out_logits, gt_labels, loss_val, img_prefix = sess.run([logits, labels, loss, img_name])
+  for step in range(dataset.num_examples()):
+    start_time = time.time()
+    out_logits, gt_labels, loss_val, img_prefix = sess.run(
+      [logits, labels, loss, img_name])
+    duration = time.time() - start_time
     loss_avg += loss_val
     #net_labels = out_logits[0].argmax(2).astype(np.int32, copy=False)
     net_labels = out_logits[0].argmax(2).astype(np.int32)
     #gt_labels = gt_labels.astype(np.int32, copy=False)
-    cylib.collect_confusion_matrix(net_labels.reshape(-1), gt_labels.reshape(-1), conf_mat)
-    if FLAGS.draw_predictions:
+    cylib.collect_confusion_matrix(net_labels.reshape(-1),
+                                   gt_labels.reshape(-1), conf_mat)
+
+    if step % 10 == 0:
+      num_examples_per_step = FLAGS.batch_size
+      examples_per_sec = num_examples_per_step / duration
+      sec_per_batch = float(duration)
+      format_str = 'epoch %d, step %d / %d, loss = %.2f \
+        (%.1f examples/sec; %.3f sec/batch)'
+      #print('lr = ', clr)
+      print(format_str % (epoch_num, step, reader.num_examples(dataset), loss_val,
+                          examples_per_sec, sec_per_batch))
+    if FLAGS.draw_predictions and step % 100 == 0:
       img_prefix = img_prefix[0].decode("utf-8")
-      save_path = FLAGS.debug_dir + '/val/' + img_prefix + '.png'
+      save_path = FLAGS.debug_dir + '/val/' + '%03d_' % epoch_num + img_prefix + '.png'
       eval_helper.draw_output(net_labels, CityscapesDataset.CLASS_INFO, save_path)
     #print(q_size)
   #print(conf_mat)
@@ -111,17 +124,20 @@ def train(model, train_dataset, valid_dataset):
           num_labels_valid, is_training=False)
       #loss_valid = model.loss(logits_valid, labels_valid, weights_valid,
       #                        num_labels_valid, is_training=False)
+    #logits_valid, loss_valid = logits, loss
+
 
     # Add a summary to track the learning rate.
     tf.scalar_summary('learning_rate', lr)
     #tf.scalar_summary('learning_rate', tf.mul(lr, tf.constant(1 / FLAGS.initial_learning_rate)))
 
     #with tf.control_dependencies([loss_averages_op]):
-    #opt = tf.train.GradientDescentOptimizer(lr)
+    opt = None
     if FLAGS.optimizer == 'Adam':
       opt = tf.train.AdamOptimizer(lr)
     elif FLAGS.optimizer == 'Momentum':
       opt = tf.train.MomentumOptimizer(lr, FLAGS.momentum)
+      #opt = tf.train.GradientDescentOptimizer(lr)
     else:
       raise ValueError()
     grads = opt.compute_gradients(loss)
@@ -133,7 +149,10 @@ def train(model, train_dataset, valid_dataset):
     for var in tf.trainable_variables():
       tf.histogram_summary(var.op.name, var)
     # Add histograms for gradients.
+    grad_tensors = []
     for grad, var in grads:
+      grad_tensors += [grad]
+      #print(var)
       if grad is not None:
         tf.histogram_summary(var.op.name + '/gradients', grad)
     #grad = grads[-2][0]
@@ -195,7 +214,10 @@ def train(model, train_dataset, valid_dataset):
       print('\ntensorboard --logdir=' + FLAGS.train_dir + '\n')
       conf_mat = np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64)
       conf_mat = np.ascontiguousarray(conf_mat)
-      for step in range(reader.num_examples(train_dataset)):
+      #for step in range(reader.num_examples(train_dataset)):
+      num_batches = 1488
+      #num_batches = train_dataset.num_examples()
+      for step in range(num_batches):
         start_time = time.time()
         run_ops = [train_op, loss, logits, labels, lr, img_name, global_step]
         if step % 100 == 0:
@@ -205,8 +227,11 @@ def train(model, train_dataset, valid_dataset):
               global_step_val, summary_str, loss_avg_train_val) = ret_val
           summary_writer.add_summary(summary_str, global_step_val)
         else:
+          #run_ops += [grad_tensors]
           ret_val = sess.run(run_ops)
           (_, loss_val, scores, yt, clr, img_prefix, global_step_val) = ret_val
+          #(_, loss_val, scores, yt, clr, img_prefix, global_step_val, grads_val) = ret_val
+          #train_helper.print_grad_stats(grads_val, grad_tensors)
         duration = time.time() - start_time
 
         #print(ret_val[5])
@@ -217,16 +242,18 @@ def train(model, train_dataset, valid_dataset):
         assert not np.isnan(loss_val), 'Model diverged with loss = NaN'
 
         # estimate training accuracy on the last 30% of the epoch
-        if step > int(0.7 * train_dataset.num_examples()):
+        if step > int(0.7 * num_batches):
           label_map = scores[0].argmax(2).astype(np.int32)
-          cylib.collect_confusion_matrix(label_map.reshape(-1), yt.reshape(-1), conf_mat)
+          cylib.collect_confusion_matrix(label_map.reshape(-1),
+                                         yt.reshape(-1), conf_mat)
 
         img_prefix = img_prefix[0].decode("utf-8")
 
         #print(scores[0,100:102,300:302,:])
         if FLAGS.draw_predictions and step % 100 == 0:
-          save_path = os.path.join(
-              FLAGS.debug_dir, 'train', '%05d' % step + '_' + img_prefix + '.png')
+          save_path = os.path.join(FLAGS.debug_dir, 'train',
+                                   '%05d_%03d_' % (step, epoch_num) +
+                                   img_prefix + '.png')
           #print(save_path)
           label_map = scores[0].argmax(2).astype(np.int32)
           eval_helper.draw_output(label_map, CityscapesDataset.CLASS_INFO, save_path)
@@ -236,18 +263,20 @@ def train(model, train_dataset, valid_dataset):
           examples_per_sec = num_examples_per_step / duration
           sec_per_batch = float(duration)
 
-          format_str = '%s: epoch %d, step %d / %d, loss = %.2f (%.1f examples/sec; %.3f sec/batch)'
+          format_str = '%s: epoch %d, step %d / %d, loss = %.2f \
+            (%.1f examples/sec; %.3f sec/batch)'
           #print('lr = ', clr)
-          print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num, step,
-                              reader.num_examples(train_dataset), loss_val,
+          print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num,
+                              step, reader.num_examples(train_dataset), loss_val,
                               examples_per_sec, sec_per_batch))
 
       # TODO add moving average
       train_pixacc, train_iou, _, _, _ = eval_helper.compute_errors(conf_mat, 'Train',
           CityscapesDataset.CLASS_INFO)
 
-      valid_loss, valid_pixacc, valid_iou, valid_recall, valid_precision = \
-          evaluate(sess, logits_valid, loss_valid, labels_valid, img_name_valid, valid_dataset)
+      valid_loss, valid_pixacc, valid_iou, valid_recall, valid_precision = evaluate(
+        sess, epoch_num, logits_valid, loss_valid,
+        labels_valid, img_name_valid, valid_dataset)
       train_iou_data += [train_iou]
       train_pixacc_data += [train_pixacc]
       valid_iou_data += [valid_iou]
@@ -265,11 +294,12 @@ def train(model, train_dataset, valid_dataset):
             [train_iou_data, valid_iou_data], [train_pixacc_data, valid_pixacc_data])
 
       # Save the model checkpoint periodically.
-      #if valid_iou >= max(valid_iou_data):
-      #  print('Saving model...')
-      #  checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
-      #  #saver.save(sess, checkpoint_path, global_step=epoch_num)
-      #  saver.save(sess, checkpoint_path)
+      if FLAGS.save_net:
+        if valid_iou >= max(valid_iou_data):
+          print('Saving model...')
+          checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
+          #saver.save(sess, checkpoint_path, global_step=epoch_num)
+          saver.save(sess, checkpoint_path)
 
     #coord.request_stop()
     #coord.join(threads)

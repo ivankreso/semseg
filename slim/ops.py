@@ -119,15 +119,20 @@ def batch_norm(inputs,
       update_moving_variance = moving_averages.assign_moving_average(
           moving_variance, variance, decay)
       tf.add_to_collection(UPDATE_OPS_COLLECTION, update_moving_variance)
+      #update_moving_mean = moving_mean.assign(mean)
+      #update_moving_variance = moving_variance.assign(variance)
     else:
       # Just use the moving_mean and moving_variance.
       mean = moving_mean
       variance = moving_variance
     # Normalize the activations.
     if is_training:
-      with tf.control_dependencies([update_moving_mean, update_moving_variance]):  
+      print(update_moving_mean)
+      with tf.control_dependencies([update_moving_mean, update_moving_variance]):
         outputs = tf.nn.batch_normalization(
             inputs, mean, variance, beta, gamma, epsilon)
+        # TODO
+        #outputs = tf.Print(outputs, [mean, moving_mean], message='mean = ' + moving_mean.name)
     else:
       outputs = tf.nn.batch_normalization(
           inputs, mean, variance, beta, gamma, epsilon)

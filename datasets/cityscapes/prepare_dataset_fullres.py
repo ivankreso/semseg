@@ -80,15 +80,21 @@ def prepare_dataset(name):
   half_width = int(FLAGS.img_width / 2)
   left_x_end = int(half_width + FLAGS.rf_half_size)
   right_x_start = int(half_width - FLAGS.rf_half_size)
+  rgb_sum = np.zeros((FLAGS.img_height, FLAGS.img_width, 3))
+  img_cnt = 0
   for city in cities:
     print(city)
     img_list = next(os.walk(root_dir + city))[2]
     #for img_name in img_list:
     for i in trange(len(img_list)):
+      img_cnt += 1
       img_name = img_list[i]
       img_prefix = img_name[:-4]
       rgb_path = root_dir + city + '/' + img_name
       rgb = ski.data.load(rgb_path)
+      rgb_sum += rgb
+      print((rgb_sum / img_cnt).mean((0,1)))
+      continue
       #gt_path = gt_dir + city + '/' + img_name
       #gt_rgb = ski.data.load(gt_path).astype(np.uint8)
       gt_path = gt_dir + city + '/' + img_prefix + '.pickle'

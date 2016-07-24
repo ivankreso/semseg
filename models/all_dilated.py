@@ -6,12 +6,20 @@ import np_helper
 import losses
 from models.model_helper import convolve, read_vgg_init
 
+IMAGENET_MEAN_BGR = [103.939, 116.779, 123.68]
 FLAGS = tf.app.flags.FLAGS
 
-def normalize_input(image):
-  vgg_mean = tf.constant([123.68, 116.779, 103.939])
-  image -= vgg_mean
-  return image
+#def normalize_input(image):
+#  vgg_mean = tf.constant([123.68, 116.779, 103.939])
+#  image -= vgg_mean
+#  return image
+def normalize_input(rgb):
+  """Changes RGB [0,1] valued image to BGR [0,255] with mean subtracted."""
+  with tf.name_scope('input'), tf.device('/cpu:0'):
+    red, green, blue = tf.split(3, 3, rgb)
+    bgr = tf.concat(3, [blue, green, red])
+    bgr -= IMAGENET_MEAN_BGR
+    return bgr
 
 #def inference(inputs, is_training=True):
 def build(inputs, labels, weights, num_labels, is_training=True):
@@ -56,7 +64,7 @@ def build(inputs, labels, weights, num_labels, is_training=True):
       net = convolve(net, conv3_sz, k, 'conv3_1', vgg_layers)
       net = convolve(net, conv3_sz, k, 'conv3_2', vgg_layers)
       net = convolve(net, conv3_sz, k, 'conv3_3', vgg_layers)
-      net = ops.max_pool(net, [2, 2], scope='pool3', stride=1, padding='SAME')
+      #net = ops.max_pool(net, [2, 2], scope='pool3', stride=1, padding='SAME')
       net = tf.batch_to_space(net, crops=pad, block_size=drate)
       drate *= 2
 
@@ -64,7 +72,7 @@ def build(inputs, labels, weights, num_labels, is_training=True):
       net = convolve(net, conv4_sz, k, 'conv4_1', vgg_layers)
       net = convolve(net, conv4_sz, k, 'conv4_2', vgg_layers)
       net = convolve(net, conv4_sz, k, 'conv4_3', vgg_layers)
-      net = ops.max_pool(net, [2, 2], scope='pool4', stride=1, padding='SAME')
+      #net = ops.max_pool(net, [2, 2], scope='pool4', stride=1, padding='SAME')
       net = tf.batch_to_space(net, crops=pad, block_size=drate)
       drate *= 2
       #pad = ...  # padding so that the input dims are multiples of rate
@@ -100,7 +108,8 @@ def build(inputs, labels, weights, num_labels, is_training=True):
         #net = convolve(net, 1024, 3, 'conv6_1')
         #net = tf.nn.atrous_conv2d(net, [7, 7, 512, 1024], rate=4, padding="SAME", name='conv6_1')
         #net = tf.space_to_batch(net, paddings=pad, block_size=drate)
-        net = convolve(net, 512, 7, 'conv6_1')
+        #net = convolve(net, 512, 7, 'conv6_1')
+        net = convolve(net, 1024, 7, 'conv6_1')
         #net = convolve(net, 512, 7, 'conv6_1')
         #net = convolve(net, 2048, 7, 'conv6_1')
         #net = convolve(net, 4096, 7, 'conv6_1')
@@ -110,7 +119,8 @@ def build(inputs, labels, weights, num_labels, is_training=True):
         net = tf.batch_to_space(net, crops=pad, block_size=drate)
 
         #net = convolve(net, 1024, 7, 'conv6_1')
-        net = convolve(net, 512, 3, 'conv6_2')
+        #net = convolve(net, 512, 3, 'conv6_2')
+        net = convolve(net, 512, 1, 'conv6_2')
         #net = convolve(net, 512, 3, 'conv6_3')
         #net = convolve(net, 512, 1, 'fc7')
 

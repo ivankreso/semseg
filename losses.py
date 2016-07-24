@@ -64,7 +64,7 @@ def softmax(logits):
   return softmax_2d
 
 
-def weighted_cross_entropy_loss(logits, labels, weights=None, num_labels=1):
+def weighted_cross_entropy_loss(logits, labels, weights=None, num_labels=1, max_weight=100):
   print('loss: Weighted Cross Entropy Loss')
   num_examples = FLAGS.batch_size * FLAGS.img_height * FLAGS.img_width
   with tf.op_scope([logits, labels], None, 'WeightedCrossEntropyLoss'):
@@ -80,7 +80,7 @@ def weighted_cross_entropy_loss(logits, labels, weights=None, num_labels=1):
     #weighted_xent = tf.mul(weights, xent)
     if weights != None:
       weights = tf.reshape(weights, shape=[num_examples])
-      xent = tf.mul(tf.minimum(tf.to_float(100), weights), xent)
+      xent = tf.mul(tf.minimum(tf.to_float(max_weight), weights), xent)
     #weighted_xent = xent
 
     total_loss = tf.div(tf.reduce_sum(xent), tf.to_float(num_labels), name='value')

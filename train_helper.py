@@ -1,6 +1,7 @@
 from datetime import datetime
 import time
 import tensorflow as tf
+import numpy as np
 
 
 class Logger(object):
@@ -13,6 +14,17 @@ class Logger(object):
   def flush(self) :
     for f in self.files:
       f.flush()
+
+
+def print_grad_stats(grads, grad_tensors):
+  #for grad in grads:
+  for i, (grad, tensor) in enumerate(zip(reversed(grads), reversed(grad_tensors))):
+    if i == 20: break
+    name = tensor.name
+    print('[{}]'.format(i), name)
+    print('mean = ', np.abs(grad).mean())
+    print('std = ', grad.std())
+  print()
 
 
 def get_variable_map():
