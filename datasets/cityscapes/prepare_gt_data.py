@@ -11,7 +11,7 @@ from datasets.dataset_helper import convert_colors_to_indices, convert_colors_to
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('gt_dir',
-    '/home/kivan/datasets/Cityscapes/2048x1024/gt_rgb/', 'Dataset dir')
+    '/home/kivan/datasets/Cityscapes/2048x1024/gt/', 'Dataset dir')
 tf.app.flags.DEFINE_string('save_dir', FLAGS.gt_dir + '/../gt_data/', '')
 
 

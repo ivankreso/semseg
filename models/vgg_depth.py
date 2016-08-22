@@ -9,15 +9,15 @@ from models.model_helper import convolve, read_vgg_init
 
 FLAGS = tf.app.flags.FLAGS
 
-MEAN_RGB = [75.2051479, 85.01498926, 75.08929598]
+MEAN_DEPTH = [32.45]
 
-def normalize_input(rgb):
-  """Changes RGB [0,1] valued image to BGR [0,255] with mean subtracted."""
+
+def normalize_input(depth):
   with tf.name_scope('input'), tf.device('/cpu:0'):
-    rgb -= MEAN_RGB
-    red, green, blue = tf.split(3, 3, rgb)
-    bgr = tf.concat(3, [blue, green, red])
-    return bgr
+    depth -= MEAN_DEPTH
+    depth = tf.concat(3, [depth, depth, depth])
+    return depth 
+
 
 #def inference(inputs, is_training=True):
 def build(inputs, labels, weights, num_labels, is_training=True):

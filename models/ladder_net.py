@@ -5,14 +5,28 @@ import numpy as np
 import np_helper
 import losses
 from models.model_helper import convolve, read_vgg_init
+import datasets.reader as reader
 
 FLAGS = tf.app.flags.FLAGS
 
+MEAN_RGB = [75.2051479, 85.01498926, 75.08929598]
+#IMAGENET_MEAN_RGB = [123.68, 116.779, 103.939]
 
-def normalize_input(image):
-  vgg_mean = tf.constant([123.68, 116.779, 103.939])
-  image -= vgg_mean
-  return image
+def get_reader():
+  return reader
+
+def normalize_input(rgb):
+  """Changes RGB [0,1] valued image to BGR [0,255] with mean subtracted."""
+  with tf.name_scope('input'), tf.device('/cpu:0'):
+    rgb -= MEAN_RGB
+    red, green, blue = tf.split(3, 3, rgb)
+    bgr = tf.concat(3, [blue, green, red])
+    return bgr
+
+#def normalize_input(image):
+#  vgg_mean = tf.constant([123.68, 116.779, 103.939])
+#  image -= vgg_mean
+#  return image
 
 
 def build_refinement_module(top_layer, skip_data):
@@ -50,8 +64,10 @@ def build(inputs, labels, weights, num_labels, is_training=True):
       'decay': 0.999,
       # epsilon to prevent 0s in variance.
       'epsilon': 0.001,
-      'center': False,
-      'scale': False,
+      #'center': False,
+      'center': True,
+      #'scale': False,
+      'scale': True,
   }
   # best so far = 0.0005
   with scopes.arg_scope([ops.conv2d, ops.fc], stddev=0.01, weight_decay=0.0005):
@@ -67,12 +83,14 @@ def build(inputs, labels, weights, num_labels, is_training=True):
       net = ops.max_pool(net, [2, 2], scope='pool1')
       net = convolve(net, conv2_sz, k, 'conv2_1', vgg_layers)
       net = convolve(net, conv2_sz, k, 'conv2_2', vgg_layers)
-      skip_connections += [[net, km/4, 'conv2_2']]
+      #skip_connections += [[net, km/4, 'conv2_2']]
+      #skip_connections += [[net, km/2, 'conv2_2']]
       net = ops.max_pool(net, [2, 2], scope='pool2')
       net = convolve(net, conv3_sz, k, 'conv3_1', vgg_layers)
       net = convolve(net, conv3_sz, k, 'conv3_2', vgg_layers)
       net = convolve(net, conv3_sz, k, 'conv3_3', vgg_layers)
       #skip_connections += [[net, ]]
+      #skip_connections += [[net, km, 'conv3_3']]
       skip_connections += [[net, km/2, 'conv3_3']]
       net = ops.max_pool(net, [2, 2], scope='pool3')
       net = convolve(net, conv4_sz, k, 'conv4_1', vgg_layers)
@@ -85,8 +103,8 @@ def build(inputs, labels, weights, num_labels, is_training=True):
       net = convolve(net, conv5_sz, k, 'conv5_3', vgg_layers)
       skip_connections += [[net, km, 'conv5_3']]
 
+      #fix BN
       with scopes.arg_scope([ops.conv2d, ops.fc], batch_norm_params=bn_params):
-      #with scopes.arg_scope([ops.conv2d, ops.fc], batch_norm_params=bn_params, weight_decay=0.0005):
         #pad = [[0, 0], [0, 0]]
         ##net = tf.space_to_batch(net, paddings=pad, block_size=4)
         #net = tf.space_to_batch(net, paddings=pad, block_size=2)
@@ -94,11 +112,13 @@ def build(inputs, labels, weights, num_labels, is_training=True):
         ##net = convolve(net, 512, 5, 'conv6_1')
         #net = tf.batch_to_space(net, crops=pad, block_size=2)
 
-        net = convolve(net, 1024, 7, 'conv6_1')
+        #net = convolve(net, 1024, 7, 'conv6_1')
+        #net = convolve(net, 512, 5, 'conv6_1')
         #net = convolve(net, 1024, 5, 'conv6_1')
+        net = convolve(net, 512, 7, 'conv6_1', dilation=4)
         net = convolve(net, 512, 3, 'conv6_2')
         #net = convolve(net, 512, 3, 'conv6_3')
-        net = convolve(net, 512, 1, 'ladder_head')
+        #net = convolve(net, 512, 1, 'ladder_head')
         ladder_head = net
 
         #net = convolve(net, 1024, 1, 'conv6_1')
@@ -125,8 +145,12 @@ def build(inputs, labels, weights, num_labels, is_training=True):
 
 
 def loss(logits, labels, weights, num_labels, is_training=True):
-  loss_top = losses.weighted_cross_entropy_loss(logits[0], labels, weights, num_labels)
-  loss_bottom = losses.weighted_cross_entropy_loss(logits[1], labels, weights, num_labels)
+  #loss_top = losses.weighted_cross_entropy_loss(logits[0], labels, weights, num_labels)
+  #loss_bottom = losses.weighted_cross_entropy_loss(logits[1], labels, weights, num_labels)
+  loss_top = losses.weighted_cross_entropy_loss(
+      logits[0], labels, weights, num_labels, max_weight=10)
+  loss_bottom = losses.weighted_cross_entropy_loss(
+      logits[1], labels, weights, num_labels, max_weight=10)
   #loss_val = losses.multiclass_hinge_loss(logits, labels, weights, num_labels)
   #loss_val = losses.weighted_cross_entropy_loss(logits, labels, None, num_labels)
   #loss_val = losses.weighted_hinge_loss(logits, labels, weights, num_labels)

@@ -123,11 +123,12 @@ def batch_norm(inputs,
       #update_moving_variance = moving_variance.assign(variance)
     else:
       # Just use the moving_mean and moving_variance.
-      mean = moving_mean
-      variance = moving_variance
+      # TODO
+      #mean = moving_mean
+      #variance = moving_variance
+      mean, variance = tf.nn.moments(inputs, axis)
     # Normalize the activations.
     if is_training:
-      print(update_moving_mean)
       with tf.control_dependencies([update_moving_mean, update_moving_variance]):
         outputs = tf.nn.batch_normalization(
             inputs, mean, variance, beta, gamma, epsilon)

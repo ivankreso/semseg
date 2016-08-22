@@ -20,7 +20,8 @@ flags.DEFINE_string('data_dir',
     #'/home/kivan/datasets/Cityscapes/leftImg8bit_trainvaltest/leftImg8bit/', 'Dataset dir')
 flags.DEFINE_integer('img_width', 2048, '')
 flags.DEFINE_integer('img_height', 1024, '')
-flags.DEFINE_integer('rf_half_size', 100, '')
+#flags.DEFINE_integer('rf_half_size', 100, '')
+flags.DEFINE_integer('rf_half_size', 128, '')
 flags.DEFINE_string('save_dir',
     '/home/kivan/datasets/Cityscapes/tensorflow/' + str(FLAGS.img_width) +
     'x' + str(FLAGS.img_height) + '_uint8/', '')
@@ -92,9 +93,11 @@ def prepare_dataset(name):
       img_prefix = img_name[:-4]
       rgb_path = root_dir + city + '/' + img_name
       rgb = ski.data.load(rgb_path)
-      rgb_sum += rgb
-      print((rgb_sum / img_cnt).mean((0,1)))
-      continue
+
+      # compute mean
+      #rgb_sum += rgb
+      #print((rgb_sum / img_cnt).mean((0,1)))
+
       #gt_path = gt_dir + city + '/' + img_name
       #gt_rgb = ski.data.load(gt_path).astype(np.uint8)
       gt_path = gt_dir + city + '/' + img_prefix + '.pickle'

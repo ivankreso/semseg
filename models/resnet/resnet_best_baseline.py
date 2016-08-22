@@ -4,7 +4,6 @@ import tensorflow as tf
 from tensorflow.python.training import moving_averages
 
 from models.config import Config
-import models.model_helper as model_helper
 from models.model_helper import convolve
 import losses
 from slim import scopes
@@ -69,16 +68,11 @@ def normalize_input(rgb):
 #    bgr = tf.sub(bgr, 1.0)
 #    return bgr
 
-#def build(inputs, labels, weights, num_labels, is_training=True):
-#  logits = inference(inputs, is_training)
-#  loss_val = loss(logits, labels, weights, num_labels, is_training)
-#  return logits, loss_val
-
-
 def build(inputs, labels, weights, num_labels, is_training=True):
-  top_logits, bottom_logits = inference(inputs, is_training)
-  loss_val = loss(top_logits, bottom_logits, labels, weights, num_labels, is_training)
-  return bottom_logits, loss_val
+  logits = inference(inputs, is_training)
+  loss_val = loss(logits, labels, weights, num_labels, is_training)
+  return logits, loss_val
+
 
 def inference(x, is_training,
               num_classes=19,
@@ -105,9 +99,6 @@ def inference(x, is_training,
   c['num_blocks'] = num_blocks
   c['stack_stride'] = 2
 
-  ladder_connections = []
-  km = 128
-
   with tf.variable_scope('scale1'):
     c['conv_filters_out'] = 64
     c['ksize'] = 7
@@ -128,21 +119,17 @@ def inference(x, is_training,
     c['stack_stride'] = 1
     c['block_filters_internal'] = 64
     x = stack(x, c)
-    #ladder_connections += [[x, km/2, 'scale2']]
-
 
   with tf.variable_scope('scale3'):
     c['num_blocks'] = num_blocks[1]
     c['block_filters_internal'] = 128
     assert c['stack_stride'] == 2
     x = stack(x, c)
-    ladder_connections += [[x, km/2, 'scale3']]
 
   with tf.variable_scope('scale4'):
     c['num_blocks'] = num_blocks[2]
     c['block_filters_internal'] = 256
     x = stack(x, c)
-    ladder_connections += [[x, km, 'scale4']]
 
   with tf.variable_scope('scale5'):
     #TODO s was 2
@@ -150,7 +137,6 @@ def inference(x, is_training,
     c['num_blocks'] = num_blocks[3]
     c['block_filters_internal'] = 512
     x = stack(x, c)
-    ladder_connections += [[x, km, 'scale5']]
 
   # post-net
   #x = tf.reduce_mean(x, reduction_indices=[1, 2], name="avg_pool")
@@ -159,35 +145,27 @@ def inference(x, is_training,
     with scopes.arg_scope([ops.conv2d], stddev=CONV_WEIGHT_STDDEV, is_training=is_training,
                           weight_decay=CONV_WEIGHT_DECAY):
       with scopes.arg_scope([ops.conv2d], batch_norm_params=BN_PARAMS):
-        if FLAGS.img_width <= 720:
-          r = 2
-        else:
-          r = 4
-        # 2048 out is fine, too small speed impovement when projected to 512
+        r = 4
+        #x = convolve(x, 1024, 5, 'conv6_1', dilation=r)
+        #x = convolve(x, 512, 3, 'conv6_2')
+        fix this BN is not the same
         x = convolve(x, 1024, 1, 'conv6_0')
-        x = convolve(x, 512, 5, 'conv6_1', dilation=r)
+        x = convolve(x, 512, 7, 'conv6_1', dilation=r)
         x = convolve(x, 512, 3, 'conv6_2')
-        #ladder_connections += [[x, km, 'scale5']]
-        refine_top = x
-        for ladder_layer in reversed(ladder_connections):
-          refine_top = model_helper.build_refinement_module(refine_top, ladder_layer)
 
       x = convolve(x, num_classes, 1, 'score', activation=None)
-      logits = tf.image.resize_bilinear(x, [FLAGS.img_height, FLAGS.img_width],
-                                        name='resize_score')
-      ladder_logits = convolve(refine_top, num_classes, 1, 'ladder_score', activation=None)
-      ladder_logits = tf.image.resize_bilinear(
-        ladder_logits, [FLAGS.img_height, FLAGS.img_width], name='resize_ladder_score')
+      x = tf.image.resize_bilinear(x, [FLAGS.img_height, FLAGS.img_width],
+                                    name='resize_score')
 
-  return logits, ladder_logits
+  return x
 
 
-def loss(top_logits, bottom_logits, labels, weights, num_labels, is_training=True):
-  top_loss = losses.weighted_cross_entropy_loss(top_logits, labels, weights, num_labels,
+def loss(logits, labels, weights, num_labels, is_training=True):
+  #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, num_labels)
+  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, num_labels,
                                                 max_weight=100)
-  bottom_loss = losses.weighted_cross_entropy_loss(bottom_logits, labels, weights,
-                                                   num_labels, max_weight=100)
-  all_losses = [top_loss + bottom_loss]
+  #loss_val = losses.multiclass_hinge_loss(logits, labels, weights, num_labels)
+  all_losses = [loss_val]
 
   # get losses + regularization
   total_loss = losses.total_loss_sum(all_losses)
@@ -196,23 +174,6 @@ def loss(top_logits, bottom_logits, labels, weights, num_labels, is_training=Tru
     loss_averages_op = losses.add_loss_summaries(total_loss)
     with tf.control_dependencies([loss_averages_op]):
       total_loss = tf.identity(total_loss)
-
-  return total_loss
-
-#def loss(logits, labels, weights, num_labels, is_training=True):
-#  #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, num_labels)
-#  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, num_labels,
-#                                                max_weight=10)
-#  #loss_val = losses.multiclass_hinge_loss(logits, labels, weights, num_labels)
-#  all_losses = [loss_val]
-#
-#  # get losses + regularization
-#  total_loss = losses.total_loss_sum(all_losses)
-#
-#  if is_training:
-#    loss_averages_op = losses.add_loss_summaries(total_loss)
-#    with tf.control_dependencies([loss_averages_op]):
-#      total_loss = tf.identity(total_loss)
 
   return total_loss
 
@@ -339,12 +300,10 @@ def bn(x, c):
       x = tf.nn.batch_normalization(x, mean, variance, beta, gamma, BN_EPSILON)
       #x = tf.Print(x, [mean, moving_mean], message='mean = ' + moving_mean.name)
   else:
-    #mean = moving_mean
-    #variance = moving_variance
-    #if moving_mean.name == 'scale1/moving_mean:0':
-    #  mean, variance = tf.nn.moments(x, axis)
-    #TODO
-    mean, variance = tf.nn.moments(x, axis)
+    mean = moving_mean
+    variance = moving_variance
+    if moving_mean.name == 'scale1/moving_mean:0':
+      mean, variance = tf.nn.moments(x, axis)
 
     x = tf.nn.batch_normalization(x, mean, variance, beta, gamma, BN_EPSILON)
     #x = tf.Print(x, [mean], message='mean = ' + moving_mean.name)

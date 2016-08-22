@@ -15,7 +15,7 @@ import train_helper
 from datasets.cityscapes.cityscapes import CityscapesDataset
 #import datasets.flip_reader as reader
 #import datasets.reader_pyramid as reader
-import datasets.reader as reader
+#import datasets.reader_depth as reader
 
 np.set_printoptions(linewidth=250)
 
@@ -26,7 +26,7 @@ helper.import_module('config', FLAGS.config_path)
 print(FLAGS.config_path)
 
 
-def evaluate(sess, epoch_num, logits, loss, labels, img_name, dataset):
+def evaluate(sess, epoch_num, logits, loss, labels, img_name, dataset, reader):
   """ Trains the network
     Args:
       sess: TF session
@@ -105,6 +105,7 @@ def train(model, train_dataset, valid_dataset):
     #                                momentum=RMSPROP_MOMENTUM,
     #                                epsilon=RMSPROP_EPSILON)
 
+    reader = model.get_reader()
     # Get images and labels.
     image, labels, weights, num_labels, img_name = \
         reader.inputs(train_dataset, num_epochs=FLAGS.max_epochs)
@@ -194,9 +195,9 @@ def train(model, train_dataset, valid_dataset):
     summary_op = tf.merge_all_summaries()
 
     # Start the queue runners.
-    #coord = tf.train.Coordinator()
-    #threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    tf.train.start_queue_runners(sess=sess)
+    coord = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+    #tf.train.start_queue_runners(sess=sess)
 
     summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, graph=sess.graph)
 
@@ -214,23 +215,21 @@ def train(model, train_dataset, valid_dataset):
       print('\ntensorboard --logdir=' + FLAGS.train_dir + '\n')
       conf_mat = np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64)
       conf_mat = np.ascontiguousarray(conf_mat)
-      #for step in range(reader.num_examples(train_dataset)):
-      num_batches = 1488
-      #num_batches = train_dataset.num_examples()
+      num_batches = reader.num_examples(train_dataset) // FLAGS.num_validations_per_epoch
       for step in range(num_batches):
         start_time = time.time()
-        run_ops = [train_op, loss, logits, labels, lr, img_name, global_step]
+        run_ops = [train_op, loss, logits, labels, img_name, global_step]
         if step % 100 == 0:
           run_ops += [summary_op, loss_avg_train]
           ret_val = sess.run(run_ops)
-          (_, loss_val, scores, yt, clr, img_prefix, \
+          (_, loss_val, scores, yt, img_prefix, \
               global_step_val, summary_str, loss_avg_train_val) = ret_val
           summary_writer.add_summary(summary_str, global_step_val)
         else:
           #run_ops += [grad_tensors]
           ret_val = sess.run(run_ops)
-          (_, loss_val, scores, yt, clr, img_prefix, global_step_val) = ret_val
-          #(_, loss_val, scores, yt, clr, img_prefix, global_step_val, grads_val) = ret_val
+          (_, loss_val, scores, yt, img_prefix, global_step_val) = ret_val
+          #(_, loss_val, scores, yt, img_prefix, global_step_val, grads_val) = ret_val
           #train_helper.print_grad_stats(grads_val, grad_tensors)
         duration = time.time() - start_time
 
@@ -276,7 +275,7 @@ def train(model, train_dataset, valid_dataset):
 
       valid_loss, valid_pixacc, valid_iou, valid_recall, valid_precision = evaluate(
         sess, epoch_num, logits_valid, loss_valid,
-        labels_valid, img_name_valid, valid_dataset)
+        labels_valid, img_name_valid, valid_dataset, reader)
       train_iou_data += [train_iou]
       train_pixacc_data += [train_pixacc]
       valid_iou_data += [valid_iou]
@@ -301,8 +300,8 @@ def train(model, train_dataset, valid_dataset):
           #saver.save(sess, checkpoint_path, global_step=epoch_num)
           saver.save(sess, checkpoint_path)
 
-    #coord.request_stop()
-    #coord.join(threads)
+    coord.request_stop()
+    coord.join(threads)
     sess.close()
 
 

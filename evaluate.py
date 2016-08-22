@@ -82,7 +82,8 @@ def evaluate(model, dataset, save_dir):
       #gt_labels = gt_labels.astype(np.int32, copy=False)
       cylib.collect_confusion_matrix(net_labels.reshape(-1), gt_labels.reshape(-1), conf_mat)
       save_path = os.path.join(save_dir, img_prefix + '.png')
-      error_save_path = os.path.join(save_dir, img_prefix + '_errors.png')
+      #error_save_path = os.path.join(save_dir, str(loss_val) + img_prefix + '_errors.png')
+      error_save_path = os.path.join(save_dir, img_prefix + '_' + str(loss_val) + '_error.png')
       gt_labels = gt_labels.reshape(net_labels.shape)
       eval_helper.draw_output(net_labels, CityscapesDataset.CLASS_INFO, save_path)
       net_labels[net_labels == gt_labels] = -1
