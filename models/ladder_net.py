@@ -6,6 +6,7 @@ import np_helper
 import losses
 from models.model_helper import convolve, read_vgg_init
 import datasets.reader as reader
+#import datasets.flip_reader as reader
 
 FLAGS = tf.app.flags.FLAGS
 

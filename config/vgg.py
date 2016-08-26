@@ -4,7 +4,8 @@ import train_helper
 
 #MODEL_PATH = './models/vgg.py'
 #MODEL_PATH = './models/all_dilated.py'
-MODEL_PATH = './models/ladder_net.py'
+#MODEL_PATH = './models/ladder_net.py'
+MODEL_PATH = './models/vgg_new.py'
 
 #MODEL_PATH = './models/six_blocks.py'
 #MODEL_PATH = './models/dilated_multiscale.py'
@@ -20,17 +21,16 @@ DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
 #IMG_WIDTH = 640
 #IMG_HEIGHT = 288
-###IMG_WIDTH = 1024
-###IMG_HEIGHT = 448
-#DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
-#                           '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
+IMG_WIDTH = 1024
+IMG_HEIGHT = 448
+DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
+                           '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 
 
 tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
 # 1e-4 best, 1e-3 is too big
 tf.app.flags.DEFINE_float('initial_learning_rate', 1e-4, '')
 tf.app.flags.DEFINE_integer('num_epochs_per_decay', 2, '')
-tf.app.flags.DEFINE_integer('num_validations_per_epoch', 2, '')
 
 #tf.app.flags.DEFINE_string('optimizer', 'Momentum', '')
 ##tf.app.flags.DEFINE_float('initial_learning_rate', 2e-4,
@@ -40,6 +40,7 @@ tf.app.flags.DEFINE_integer('num_validations_per_epoch', 2, '')
 #tf.app.flags.DEFINE_float('num_epochs_per_decay', 3.0,
 #                          """Epochs after which learning rate decays.""")
 
+tf.app.flags.DEFINE_integer('num_validations_per_epoch', 2, '')
 
 tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.5,
 #tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.2,

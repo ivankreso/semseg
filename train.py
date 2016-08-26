@@ -117,11 +117,11 @@ def train(model, train_dataset, valid_dataset):
     # Build a Graph that computes the logits predictions from the inference model.
     # Calculate loss.
     #with tf.variable_scope("model"):
-    logits, loss = model.build(image, labels, weights, num_labels, is_training=True)
+    logits, loss, draw_data = model.build(image, labels, weights, num_labels, is_training=True)
     #loss = model.loss(logits, labels, weights, num_labels)
     #with tf.variable_scope("model", reuse=True):
     with tf.variable_scope('', reuse=True):
-      logits_valid, loss_valid = model.build(image_valid, labels_valid, weights_valid,
+      logits_valid, loss_valid, draw_data_val = model.build(image_valid, labels_valid, weights_valid,
           num_labels_valid, is_training=False)
       #loss_valid = model.loss(logits_valid, labels_valid, weights_valid,
       #                        num_labels_valid, is_training=False)
@@ -218,17 +218,17 @@ def train(model, train_dataset, valid_dataset):
       num_batches = reader.num_examples(train_dataset) // FLAGS.num_validations_per_epoch
       for step in range(num_batches):
         start_time = time.time()
-        run_ops = [train_op, loss, logits, labels, img_name, global_step]
+        run_ops = [train_op, loss, logits, labels, draw_data, img_name, global_step]
         if step % 100 == 0:
           run_ops += [summary_op, loss_avg_train]
           ret_val = sess.run(run_ops)
-          (_, loss_val, scores, yt, img_prefix, \
+          (_, loss_val, scores, yt, draw_data_val, img_prefix, \
               global_step_val, summary_str, loss_avg_train_val) = ret_val
           summary_writer.add_summary(summary_str, global_step_val)
         else:
           #run_ops += [grad_tensors]
           ret_val = sess.run(run_ops)
-          (_, loss_val, scores, yt, img_prefix, global_step_val) = ret_val
+          (_, loss_val, scores, yt, draw_data_val, img_prefix, global_step_val) = ret_val
           #(_, loss_val, scores, yt, img_prefix, global_step_val, grads_val) = ret_val
           #train_helper.print_grad_stats(grads_val, grad_tensors)
         duration = time.time() - start_time
@@ -250,12 +250,15 @@ def train(model, train_dataset, valid_dataset):
 
         #print(scores[0,100:102,300:302,:])
         if FLAGS.draw_predictions and step % 100 == 0:
-          save_path = os.path.join(FLAGS.debug_dir, 'train',
-                                   '%05d_%03d_' % (step, epoch_num) +
-                                   img_prefix + '.png')
+          #save_path = os.path.join(FLAGS.debug_dir, 'train',
+          #                         '%05d_%03d_' % (step, epoch_num) +
+          #                         img_prefix + '.png')
           #print(save_path)
-          label_map = scores[0].argmax(2).astype(np.int32)
-          eval_helper.draw_output(label_map, CityscapesDataset.CLASS_INFO, save_path)
+          #label_map = scores[0].argmax(2).astype(np.int32)
+          #eval_helper.draw_output(label_map, CityscapesDataset.CLASS_INFO, save_path)
+          save_prefix = os.path.join(FLAGS.debug_dir, 'train',
+                                     '%03d_%05d_' % (epoch_num, step) + img_prefix)
+          model.draw_output(draw_data_val, CityscapesDataset.CLASS_INFO, save_prefix)
 
         if step % 10 == 0:
           num_examples_per_step = FLAGS.batch_size

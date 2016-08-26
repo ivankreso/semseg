@@ -1,21 +1,34 @@
 import numpy as np
 import tensorflow as tf
-import slim
-from slim import ops
-from slim import scopes
+import tensorflow.contrib.layers as layers
+#import slim
+#from slim import ops
+#from slim import scopes
 import np_helper
 
 FLAGS = tf.app.flags.FLAGS
 
-def convolve(inputs, num_maps, k, name, init_layers=None, activation=tf.nn.relu,
-             dilation=None, stride=1):
-  if init_layers != None:
-    init_map = {'weights':init_layers[name + '/weights'],
-                'biases':init_layers[name + '/biases']}
+def convolve(inputs, num_outputs, k, name, init_layers):
+  if init_layers is not None:
+    weight_init = init_layers[name + '/weights']
+    bias_init = init_layers[name + '/biases']
   else:
-    init_map = None
-  return ops.conv2d(inputs, num_maps, [k, k], scope=name, init=init_map, activation=activation,
-                    seed=FLAGS.seed, dilation=dilation, stride=stride)
+    raise ValueError("No init!")
+    weight_init = bias_init = None
+  net = layers.convolution2d(inputs, num_outputs, k, weights_initializer=weight_init,
+                             biases_initializer=bias_init, scope=name)
+  return net
+
+
+#def convolve_slim(inputs, num_maps, k, name, init_layers=None, activation=tf.nn.relu,
+#             dilation=None, stride=1):
+#  if init_layers != None:
+#    init_map = {'weights':init_layers[name + '/weights'],
+#                'biases':init_layers[name + '/biases']}
+#  else:
+#    init_map = None
+#  return ops.conv2d(inputs, num_maps, [k, k], scope=name, init=init_map, activation=activation,
+#                    seed=FLAGS.seed, dilation=dilation, stride=stride)
 
 
 def build_refinement_module(top_layer, skip_data):
