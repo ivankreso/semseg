@@ -48,7 +48,7 @@ def evaluate(model, dataset, save_dir):
     # Build a Graph that computes the logits predictions from the inference model.
     # Calculate loss.
     #with tf.variable_scope("model"):
-    logits, loss = model.build(image, labels, weights, num_labels, is_training=False)
+    logits, loss, draw_data = model.build(image, labels, weights, num_labels, is_training=False)
 
 
     #sess.run(tf.initialize_all_variables())

@@ -5,7 +5,9 @@ import train_helper
 #MODEL_PATH = './models/vgg.py'
 #MODEL_PATH = './models/all_dilated.py'
 #MODEL_PATH = './models/ladder_net.py'
-MODEL_PATH = './models/vgg_new.py'
+#MODEL_PATH = './models/vgg_new.py'
+#MODEL_PATH = './models/vgg_multiblock.py'
+MODEL_PATH = './models/vgg_multiblock_depth.py'
 
 #MODEL_PATH = './models/six_blocks.py'
 #MODEL_PATH = './models/dilated_multiscale.py'
@@ -23,8 +25,10 @@ DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 #IMG_HEIGHT = 288
 IMG_WIDTH = 1024
 IMG_HEIGHT = 448
+#DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
+#                           '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
-                           '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
+                           '{}x{}_multiscale/'.format(IMG_WIDTH, IMG_HEIGHT))
 
 
 tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
@@ -63,11 +67,11 @@ tf.app.flags.DEFINE_string('debug_dir', os.path.join(SAVE_DIR, 'debug'), '')
 tf.app.flags.DEFINE_string('vgg_init_dir', '/home/kivan/datasets/pretrained/vgg16/', '')
 #tf.app.flags.DEFINE_integer('max_steps', 100000,
 #                            """Number of batches to run.""")
-tf.app.flags.DEFINE_integer('max_epochs', 40, 'Number of epochs to run.')
+tf.app.flags.DEFINE_integer('max_epochs', 30, 'Number of epochs to run.')
 tf.app.flags.DEFINE_integer('batch_size', 1, '')
 tf.app.flags.DEFINE_integer('num_classes', 19, '')
 tf.app.flags.DEFINE_boolean('log_device_placement', False, 'Whether to log device placement.')
-tf.app.flags.DEFINE_boolean('draw_predictions', False, 'Whether to draw.')
+tf.app.flags.DEFINE_boolean('draw_predictions', True, 'Whether to draw.')
 tf.app.flags.DEFINE_boolean('save_net', True, 'Whether to save.')
 
 tf.app.flags.DEFINE_integer('seed', 66478, '')

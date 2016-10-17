@@ -66,6 +66,7 @@ def softmax(logits):
 
 def weighted_cross_entropy_loss(logits, labels, weights=None, num_labels=1, max_weight=100):
   print('loss: Weighted Cross Entropy Loss')
+  print(labels)
   num_examples = FLAGS.batch_size * FLAGS.img_height * FLAGS.img_width
   with tf.op_scope([logits, labels], None, 'WeightedCrossEntropyLoss'):
     labels = tf.reshape(labels, shape=[num_examples])
@@ -89,7 +90,7 @@ def weighted_cross_entropy_loss(logits, labels, weights=None, num_labels=1, max_
     return total_loss
 
 
-def multiclass_hinge_loss(logits, labels, weights, num_labels_old):
+def multiclass_hinge_loss(logits, labels, weights):
   print('loss: Hinge loss')
   num_examples = FLAGS.batch_size * FLAGS.img_height * FLAGS.img_width
   num_classes = FLAGS.num_classes
@@ -132,8 +133,6 @@ def multiclass_hinge_loss(logits, labels, weights, num_labels_old):
     #total_loss = tf.reduce_sum(tf.mul(weights, hinge_loss))
     #total_loss = tf.div(total_loss, tf.to_float(num_examples), name='value')
     total_loss = tf.reduce_mean(tf.mul(tf.minimum(100.0, weights), hinge_loss))
-
-    tf.add_to_collection(slim.losses.LOSSES_COLLECTION, total_loss)
 
     #tf.nn.l2_normalize(x, dim, epsilon=1e-12, name=None)
     #tf.nn.l2_loss(t, name=None)

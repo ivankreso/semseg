@@ -241,8 +241,12 @@ def train(model, train_dataset, valid_dataset):
         assert not np.isnan(loss_val), 'Model diverged with loss = NaN'
 
         # estimate training accuracy on the last 30% of the epoch
-        if step > int(0.7 * num_batches):
-          label_map = scores[0].argmax(2).astype(np.int32)
+        #if step > int(0.7 * num_batches):
+        if step > 0:
+          #label_map = scores[0].argmax(2).astype(np.int32)
+          label_map = scores.argmax(3).astype(np.int32)
+          #print(label_map.shape)
+          #print(yt.shape)
           cylib.collect_confusion_matrix(label_map.reshape(-1),
                                          yt.reshape(-1), conf_mat)
 
