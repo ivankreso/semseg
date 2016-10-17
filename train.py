@@ -2,7 +2,6 @@ import os
 import sys
 import time
 from shutil import copyfile
-#import subprocess
 
 import numpy as np
 import tensorflow as tf
