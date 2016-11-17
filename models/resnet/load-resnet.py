@@ -1,7 +1,16 @@
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
+# File: load-resnet.py
+# Author: Eric Yujia Huang yujiah1@andrew.cmu.edu
+#         Yuxin Wu <ppwwyyxx@gmail.com>
+
+import cv2
 import tensorflow as tf
 import argparse
 import os, re
 import numpy as np
+import six
+from six.moves import zip
 from tensorflow.contrib.layers import variance_scaling_initializer
 
 from tensorpack import *
@@ -98,9 +107,29 @@ def get_inference_augmentor():
     ])
     return transformers
 
+def run_test(params, input):
+    pred_config = PredictConfig(
+        model=Model(),
+        session_init=ParamRestore(params),
+        input_names=['input'],
+        output_names=['prob']
+    )
+    predict_func = get_predict_func(pred_config)
 
-def init_params(params, data_dir):
-    ds = dataset.ILSVRC12(data_dir, 'val', shuffle=False, dir_structure='train')
+    prepro = get_inference_augmentor()
+    im = cv2.imread(input).astype('float32')
+    im = prepro.augment(im)
+    im = np.reshape( im, (1, 224, 224, 3))
+    outputs = predict_func([im])
+    prob = outputs[0]
+
+    ret = prob[0].argsort()[-10:][::-1]
+    print(ret)
+    meta = ILSVRCMeta().get_synset_words_1000()
+    print([meta[k] for k in ret])
+
+def eval_on_ILSVRC12(params, data_dir):
+    ds = dataset.ILSVRC12(data_dir, 'val', shuffle=False, dir_structure='original')
     ds = AugmentImageComponent(ds, get_inference_augmentor())
     ds = BatchData(ds, 128, remainder=True)
     pred_config = PredictConfig(

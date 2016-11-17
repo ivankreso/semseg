@@ -17,6 +17,7 @@ tf.app.flags.DEFINE_integer('img_height', 288, '')
 #tf.app.flags.DEFINE_integer('img_height', 448, '')
 tf.app.flags.DEFINE_string('save_dir', '/home/kivan/datasets/Cityscapes/tensorflow/'
     + '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '/', '')
+# leave out the car hood
 tf.app.flags.DEFINE_integer('cx_start', 0, '')
 tf.app.flags.DEFINE_integer('cx_end', 2048, '')
 tf.app.flags.DEFINE_integer('cy_start', 0, '')
@@ -35,34 +36,26 @@ def _bytes_feature(value):
 
 
 def create_tfrecord(rgb, label_map, weight_map, depth_img, num_labels, img_name, save_dir):
-  # inefficient
-  #for c in range(3):
-  #  rgb[:,:,c] -= rgb[:,:,c].mean()
-  #  rgb[:,:,c] /= rgb[:,:,c].std()
-  #for c in range(3):
-  #  rgb[:,:,c] -= VGG_MEAN[c]
-
   rows = rgb.shape[0]
   cols = rgb.shape[1]
   depth = rgb.shape[2]
 
   filename = os.path.join(save_dir + img_name + '.tfrecords')
   writer = tf.python_io.TFRecordWriter(filename)
-  rgb_raw = rgb.tostring()
-  labels_raw = label_map.tostring()
+  rgb_str = rgb.tostring()
+  labels_str = label_map.tostring()
   weights_str = weight_map.tostring()
-  disp_raw = depth_img.tostring()
+  #disp_raw = depth_img.tostring()
   example = tf.train.Example(features=tf.train.Features(feature={
       'height': _int64_feature(rows),
       'width': _int64_feature(cols),
       'depth': _int64_feature(depth),
       'num_labels': _int64_feature(int(num_labels)),
       'img_name': _bytes_feature(img_name.encode()),
-      'rgb': _bytes_feature(rgb_raw),
+      'rgb': _bytes_feature(rgb_str),
       'label_weights': _bytes_feature(weights_str),
-      #'labels': _bytes_feature(labels_raw)}))
-      'labels': _bytes_feature(labels_raw),
-      'disparity': _bytes_feature(disp_raw)}))
+      'labels': _bytes_feature(labels_str),
+      #'disparity': _bytes_feature(disp_raw)}))
   writer.write(example.SerializeToString())
   writer.close()
 
@@ -87,7 +80,6 @@ def prepare_dataset(name):
   for city in cities:
     print(city)
     img_list = next(os.walk(root_dir + city))[2]
-    #for img_name in img_list:
     for i in trange(len(img_list)):
       img_cnt += 1
       img_name = img_list[i]
@@ -116,10 +108,6 @@ def prepare_dataset(name):
       class_weights = gt_data[4]
       assert num_labels == (gt_ids < 255).sum()
       gt_ids = np.ascontiguousarray(gt_ids[cy_start:cy_end,cx_start:cx_end])
-      #gt_ids_test = ski.transform.resize(gt_ids, (FLAGS.img_height, FLAGS.img_width),
-      #                              order=0)
-      #gt_ids = ski.transform.resize(gt_ids, (FLAGS.img_height, FLAGS.img_width),
-      #                              order=0, preserve_range=True).astype(np.uint8).astype(np.int8)
       gt_ids = ski.transform.resize(gt_ids, (FLAGS.img_height, FLAGS.img_width),
                                     order=0, preserve_range=True).astype(np.uint8)
       #ski.io.imsave(save_dir + img_name, gt_ids)
