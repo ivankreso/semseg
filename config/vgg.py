@@ -3,11 +3,10 @@ import tensorflow as tf
 import train_helper
 
 #MODEL_PATH = './models/vgg.py'
-#MODEL_PATH = './models/all_dilated.py'
+MODEL_PATH = './models/all_dilated.py'
 #MODEL_PATH = './models/ladder_net.py'
-#MODEL_PATH = './models/vgg_new.py'
 #MODEL_PATH = './models/vgg_multiblock.py'
-MODEL_PATH = './models/vgg_multiblock_depth.py'
+#MODEL_PATH = './models/vgg_multiblock_depth.py'
 
 #MODEL_PATH = './models/six_blocks.py'
 #MODEL_PATH = './models/dilated_multiscale.py'
@@ -17,18 +16,18 @@ MODEL_PATH = './models/vgg_multiblock_depth.py'
 #MODEL_PATH = './models/resnet.py'
 SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets', train_helper.get_time_string())
 
-IMG_WIDTH = 1152
-IMG_HEIGHT = 1024
-DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
+#IMG_WIDTH = 1152
+#IMG_HEIGHT = 1024
+#DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
-#IMG_WIDTH = 640
-#IMG_HEIGHT = 288
-IMG_WIDTH = 1024
-IMG_HEIGHT = 448
-#DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
-#                           '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
+IMG_WIDTH = 640
+IMG_HEIGHT = 288
+#IMG_WIDTH = 1024
+#IMG_HEIGHT = 448
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
-                           '{}x{}_multiscale/'.format(IMG_WIDTH, IMG_HEIGHT))
+                           '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
+#DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
+#                           '{}x{}_multiscale/'.format(IMG_WIDTH, IMG_HEIGHT))
 
 
 tf.app.flags.DEFINE_string('optimizer', 'Adam', '')

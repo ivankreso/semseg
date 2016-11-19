@@ -5,6 +5,7 @@ import tensorflow as tf
 import skimage as ski
 import skimage.data
 import skimage.transform
+import cv2
 from tqdm import trange
 
 
@@ -15,8 +16,9 @@ tf.app.flags.DEFINE_integer('img_width', 640, '')
 tf.app.flags.DEFINE_integer('img_height', 288, '')
 #tf.app.flags.DEFINE_integer('img_width', 1024, '')
 #tf.app.flags.DEFINE_integer('img_height', 448, '')
-tf.app.flags.DEFINE_string('save_dir', '/home/kivan/datasets/Cityscapes/tensorflow/'
-    + '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '/', '')
+tf.app.flags.DEFINE_string('save_dir',
+    '/home/kivan/datasets/Cityscapes/tensorflow/' +
+    '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '/', '')
 # leave out the car hood
 tf.app.flags.DEFINE_integer('cx_start', 0, '')
 tf.app.flags.DEFINE_integer('cx_end', 2048, '')
@@ -35,7 +37,8 @@ def _bytes_feature(value):
   return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
-def create_tfrecord(rgb, label_map, weight_map, depth_img, num_labels, img_name, save_dir):
+def create_tfrecord(rgb, label_map, weight_map, depth_img,
+                    num_labels, img_name, save_dir):
   rows = rgb.shape[0]
   cols = rgb.shape[1]
   depth = rgb.shape[2]
@@ -55,13 +58,16 @@ def create_tfrecord(rgb, label_map, weight_map, depth_img, num_labels, img_name,
       'rgb': _bytes_feature(rgb_str),
       'label_weights': _bytes_feature(weights_str),
       'labels': _bytes_feature(labels_str),
-      #'disparity': _bytes_feature(disp_raw)}))
+      #'disparity': _bytes_feature(disp_raw)
+      }))
   writer.write(example.SerializeToString())
   writer.close()
 
 
 def prepare_dataset(name):
   print('Preparing ' + name)
+  height = FLAGS.img_height
+  width = FLAGS.img_width
   root_dir = FLAGS.data_dir + '/rgb/' + name + '/'
   depth_dir = os.path.join(FLAGS.data_dir, 'depth', name)
   print(depth_dir)
@@ -85,19 +91,22 @@ def prepare_dataset(name):
       img_name = img_list[i]
       img_prefix = img_name[:-4]
       rgb_path = root_dir + city + '/' + img_name
-      rgb = ski.data.load(rgb_path)
+      #rgb = ski.data.load(rgb_path)
+      rgb = cv2.imread(rgb_path, cv2.IMREAD_COLOR)
       rgb = np.ascontiguousarray(rgb[cy_start:cy_end,cx_start:cx_end,:])
-      rgb = ski.transform.resize(
-          rgb, (FLAGS.img_height, FLAGS.img_width), preserve_range=True, order=3)
+      rgb = cv2.resize(rgb, (width, height), interpolation=cv2.INTER_CUBIC)
+      #rgb = ski.transform.resize(
+      #    rgb, (FLAGS.img_height, FLAGS.img_width), preserve_range=True, order=3)
       rgb = rgb.astype(np.uint8)
-      depth_path = os.path.join(depth_dir, city, img_name[:-4] + '_leftImg8bit.png')
-      depth_img = ski.data.load(depth_path)
-      depth_img = np.ascontiguousarray(depth_img[cy_start:cy_end,cx_start:cx_end])
-      depth_img = ski.transform.resize(depth_img, (FLAGS.img_height, FLAGS.img_width),
-                                       order=0, preserve_range=True)
-      depth_img = np.round(depth_img / 256.0).astype(np.uint8)
-      depth_sum += depth_img
-      print((depth_sum / img_cnt).mean((0,1)))
+      depth_img = None
+      #depth_path = os.path.join(depth_dir, city, img_name[:-4] + '_leftImg8bit.png')
+      #depth_img = ski.data.load(depth_path)
+      #depth_img = np.ascontiguousarray(depth_img[cy_start:cy_end,cx_start:cx_end])
+      #depth_img = ski.transform.resize(depth_img, (FLAGS.img_height, FLAGS.img_width),
+      #                                 order=0, preserve_range=True)
+      #depth_img = np.round(depth_img / 256.0).astype(np.uint8)
+      #depth_sum += depth_img
+      #print((depth_sum / img_cnt).mean((0,1)))
 
       gt_path = gt_dir + city + '/' + img_prefix + '.pickle'
       with open(gt_path, 'rb') as f:
