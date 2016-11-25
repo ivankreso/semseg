@@ -1,4 +1,5 @@
 import os
+import time
 import numpy as np
 import matplotlib
 #matplotlib.use('TkAgg')
@@ -6,6 +7,49 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import skimage as ski
 import skimage.io
+import cv2
+
+import tensorflow as tf
+FLAGS = tf.app.flags.FLAGS
+
+def evaluate_depth_prediction(sess, epoch_num, run_ops, num_examples):
+  print('\nValidation performance:')
+  loss_avg = 0
+  N = num_examples
+  for step in range(N):
+    start_time = time.time()
+    loss_val, yp, yt, x, names = sess.run(run_ops)
+    duration = time.time() - start_time
+    loss_avg += loss_val
+    if step % 20 == 0:
+      num_examples_per_step = FLAGS.batch_size
+      examples_per_sec = num_examples_per_step / duration
+      sec_per_batch = float(duration)
+      format_str = 'epoch %d, step %d / %d, loss = %.2f \
+        (%.1f examples/sec; %.3f sec/batch)'
+      print(format_str % (epoch_num, step, N, loss_val,
+                          examples_per_sec, sec_per_batch))
+    #print(yp)
+    if FLAGS.draw_predictions and step % 10 == 0:
+      yp[yp<0] = 0
+      yp[yp>255] = 255
+      yp = yp.astype(np.uint8)
+      yt = yt.reshape(yp.shape).astype(np.uint8)
+      for i in range(len(names)):
+        img_prefix = names[i].decode("utf-8")
+        #save_path = FLAGS.debug_dir + '/val/' + '%03d_' % epoch_num + img_prefix + '.png'
+        save_path = os.path.join(FLAGS.debug_dir, 'val',
+            '%03d_' % epoch_num + img_prefix + '_pred.png')
+        cv2.imwrite(save_path, yp[i])
+        save_path = os.path.join(FLAGS.debug_dir, 'val',
+            '%03d_' % epoch_num + img_prefix + '_gt.png')
+        cv2.imwrite(save_path, yt[i])
+
+    #  eval_helper.draw_output(net_labels, CityscapesDataset.CLASS_INFO, save_path)
+  loss_avg /= N
+  print('Loss = ', loss_avg)
+  return loss_avg
+
 
 
 def draw_output(y, class_colors, save_path):
@@ -90,7 +134,7 @@ def compute_errors(conf_mat, name, class_info, verbose=True):
     print(name + ' pixel accuracy = %.2f %%' % avg_pixel_acc)
   return avg_pixel_acc, avg_class_iou, avg_class_recall, avg_class_precision, total_size
 
-def plot_training_progress(save_dir, loss, iou, pixel_acc):
+def plot_training_progress(save_dir, plot_data):
   fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16,8))
 
   linewidth = 2
@@ -99,34 +143,38 @@ def plot_training_progress(save_dir, loss, iou, pixel_acc):
   train_color = 'm'
   val_color = 'c'
 
-  x_data = np.linspace(1, len(loss[0]), len(loss[0]))
+  train_loss = plot_data['train_loss']
+  valid_loss = plot_data['valid_loss']
+  train_iou = plot_data['train_iou']
+  valid_iou = plot_data['valid_iou']
+  train_acc = plot_data['train_acc']
+  valid_acc = plot_data['valid_acc']
+  lr = plot_data['lr']
+  x_data = np.linspace(1, len(train_loss), len(train_loss))
   ax1.set_title('cross entropy loss', fontsize=title_size)
-  ax1.plot(x_data, loss[0], marker='o', color=train_color, linewidth=linewidth, linestyle='-', \
+  ax1.plot(x_data, train_loss, marker='o', color=train_color, linewidth=linewidth, linestyle='-', \
       label='train')
-  ax1.plot(x_data, loss[1], marker='o', color=val_color, linewidth=linewidth, linestyle='-',
+  ax1.plot(x_data, valid_loss, marker='o', color=val_color, linewidth=linewidth, linestyle='-',
       label='validation')
   ax1.legend(loc='upper right', fontsize=legend_size)
   ax2.set_title('IoU accuracy')
-  ax2.plot(x_data, iou[0], marker='o', color=train_color, linewidth=linewidth, linestyle='-',
+  ax2.plot(x_data, train_iou, marker='o', color=train_color, linewidth=linewidth, linestyle='-',
       label='train')
-  ax2.plot(x_data, iou[1], marker='o', color=val_color, linewidth=linewidth, linestyle='-',
+  ax2.plot(x_data, valid_iou, marker='o', color=val_color, linewidth=linewidth, linestyle='-',
       label='validation')
   ax2.legend(loc='upper left', fontsize=legend_size)
   ax3.set_title('pixel accuracy')
-  ax3.plot(x_data, pixel_acc[0], marker='o', color=train_color, linewidth=linewidth, linestyle='-',
+  ax3.plot(x_data, train_acc, marker='o', color=train_color, linewidth=linewidth, linestyle='-',
       label='train')
-  ax3.plot(x_data, pixel_acc[1], marker='o', color=val_color, linewidth=linewidth, linestyle='-',
+  ax3.plot(x_data, valid_acc, marker='o', color=val_color, linewidth=linewidth, linestyle='-',
       label='validation')
   ax3.legend(loc='upper left', fontsize=legend_size)
-  #ax4.set_title('')
-  #plt.figure(fig.number)
-  #plt.clf()
-  #plt.plot(x_data, data, 'b-')
-  #plt.axis([0, 6, 0, 20])
-  #plt.show()
-  #plt.draw()
-  #plt.show(block=False)
-  #plt.savefig('training_plot.pdf', bbox_inches='tight')
+
+  ax4.set_title('learning rate')
+  ax4.plot(x_data, lr, marker='o', color=train_color, linewidth=linewidth,
+           linestyle='-', label='learning rate')
+  ax4.legend(loc='upper right', fontsize=legend_size)
+
   save_path = os.path.join(save_dir, 'training_plot.pdf')
   print('Plotting in: ', save_path)
   plt.savefig(save_path)

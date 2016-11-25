@@ -12,13 +12,16 @@ from tqdm import trange
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('data_dir',
     '/home/kivan/datasets/Cityscapes/2048x1024/', 'Dataset dir')
-tf.app.flags.DEFINE_integer('img_width', 640, '')
-tf.app.flags.DEFINE_integer('img_height', 288, '')
+#tf.app.flags.DEFINE_integer('img_width', 640, '')
+#tf.app.flags.DEFINE_integer('img_height', 288, '')
+tf.app.flags.DEFINE_integer('img_width', 320, '')
+tf.app.flags.DEFINE_integer('img_height', 144, '')
 #tf.app.flags.DEFINE_integer('img_width', 1024, '')
 #tf.app.flags.DEFINE_integer('img_height', 448, '')
 tf.app.flags.DEFINE_string('save_dir',
     '/home/kivan/datasets/Cityscapes/tensorflow/' +
-    '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '/', '')
+    #'{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '/', '')
+    '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '_rgbd/', '')
 # leave out the car hood
 tf.app.flags.DEFINE_integer('cx_start', 0, '')
 tf.app.flags.DEFINE_integer('cx_end', 2048, '')
@@ -48,17 +51,17 @@ def create_tfrecord(rgb, label_map, weight_map, depth_img,
   rgb_str = rgb.tostring()
   labels_str = label_map.tostring()
   weights_str = weight_map.tostring()
-  #disp_raw = depth_img.tostring()
+  disp_raw = depth_img.tostring()
   example = tf.train.Example(features=tf.train.Features(feature={
       'height': _int64_feature(rows),
       'width': _int64_feature(cols),
       'depth': _int64_feature(depth),
-      'num_labels': _int64_feature(int(num_labels)),
+      #'num_labels': _int64_feature(int(num_labels)),
       'img_name': _bytes_feature(img_name.encode()),
       'rgb': _bytes_feature(rgb_str),
-      'label_weights': _bytes_feature(weights_str),
-      'labels': _bytes_feature(labels_str),
-      #'disparity': _bytes_feature(disp_raw)
+      #'label_weights': _bytes_feature(weights_str),
+      #'labels': _bytes_feature(labels_str),
+      'disparity': _bytes_feature(disp_raw)
       }))
   writer.write(example.SerializeToString())
   writer.close()
@@ -98,13 +101,15 @@ def prepare_dataset(name):
       #rgb = ski.transform.resize(
       #    rgb, (FLAGS.img_height, FLAGS.img_width), preserve_range=True, order=3)
       rgb = rgb.astype(np.uint8)
-      depth_img = None
-      #depth_path = os.path.join(depth_dir, city, img_name[:-4] + '_leftImg8bit.png')
-      #depth_img = ski.data.load(depth_path)
-      #depth_img = np.ascontiguousarray(depth_img[cy_start:cy_end,cx_start:cx_end])
-      #depth_img = ski.transform.resize(depth_img, (FLAGS.img_height, FLAGS.img_width),
-      #                                 order=0, preserve_range=True)
-      #depth_img = np.round(depth_img / 256.0).astype(np.uint8)
+      #depth_img = None
+      depth_path = os.path.join(depth_dir, city, img_name[:-4] + '_leftImg8bit.png')
+      depth_img = ski.data.load(depth_path)
+      #depth_img = cv2.imread(rgb_path)
+      depth_img = np.ascontiguousarray(depth_img[cy_start:cy_end,cx_start:cx_end])
+      #depth_img = cv2.resize(depth_img, (width, height), interpolation=cv2.INTER_NEAREST)
+      depth_img = ski.transform.resize(depth_img, (FLAGS.img_height, FLAGS.img_width),
+                                       order=0, preserve_range=True)
+      depth_img = np.round(depth_img / 256.0).astype(np.uint8)
       #depth_sum += depth_img
       #print((depth_sum / img_cnt).mean((0,1)))
 

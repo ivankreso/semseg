@@ -9,6 +9,7 @@ import tensorflow as tf
 import skimage as ski
 import skimage.data
 from tqdm import trange
+import cv2
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -24,7 +25,7 @@ flags.DEFINE_integer('img_height', 1024, '')
 flags.DEFINE_integer('rf_half_size', 128, '')
 flags.DEFINE_string('save_dir',
     '/home/kivan/datasets/Cityscapes/tensorflow/' + str(FLAGS.img_width) +
-    'x' + str(FLAGS.img_height) + '_uint8/', '')
+    'x' + str(FLAGS.img_height) + '/', '')
 
 #flags.DEFINE_integer('cx_start', 0, '')
 #flags.DEFINE_integer('cx_end', 2048, '')
@@ -92,7 +93,8 @@ def prepare_dataset(name):
       img_name = img_list[i]
       img_prefix = img_name[:-4]
       rgb_path = root_dir + city + '/' + img_name
-      rgb = ski.data.load(rgb_path)
+      #rgb = ski.data.load(rgb_path)
+      rgb = cv2.imread(rgb_path, cv2.IMREAD_COLOR)
 
       # compute mean
       #rgb_sum += rgb

@@ -1,3 +1,4 @@
+import time
 import tensorflow as tf
 import argparse
 import os, re
@@ -294,14 +295,20 @@ if __name__ == '__main__':
     offset = i * batch_size
     batch_x = data_x[offset:offset+batch_size, ...]
     batch_y = data_y[offset:offset+batch_size, ...]
+    start_time = time.time()
     logits_val, top5 = sess.run([logits, top5_error], feed_dict={image:batch_x, labels:batch_y})
+    duration = time.time() - start_time
+    num_examples_per_step = batch_size
+    examples_per_sec = num_examples_per_step / duration
+    sec_per_batch = float(duration)
+
     top5_wrong += (top5==0).sum()
     yp = logits_val.argmax(1).astype(np.int32)
     cnt_wrong += (yp != batch_y).sum()
     if i % 10 == 0:
-      print('[%d / %d] top1error = %.2f - top5error = %.2f' % (i, num_batches,
-            cnt_wrong / ((i+1)*batch_size) * 100,
-            top5_wrong / ((i+1)*batch_size) * 100))
+      print('[%d / %d] top1error = %.2f - top5error = %.2f (%.1f examples/sec; %.3f sec/batch)' % (i, num_batches,
+            cnt_wrong / ((i+1)*batch_size) * 100, top5_wrong / ((i+1)*batch_size) * 100,
+            examples_per_sec, sec_per_batch))
   print(cnt_wrong / N)
   print(top5_wrong / N)
 

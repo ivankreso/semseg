@@ -11,28 +11,37 @@ import cv2
 import tensorflow.contrib.layers as layers
 from tensorflow.contrib.framework import arg_scope
 
-from tensorpack import *
+import losses
+import datasets.reader as reader
+
+FLAGS = tf.app.flags.FLAGS
+
+#from tensorpack import *
 #from tensorpack.utils import logger
 #from tensorpack.utils.stat import RatioCounter
 #from tensorpack.tfutils.symbolic_functions import *
 #from tensorpack.tfutils.summary import *
 #from tensorpack.dataflow.dataset import ILSVRCMeta
 
-MODEL_DEPTH = None
+MODEL_DEPTH = 50
 #MEAN_RGB = [75.2051479, 85.01498926, 75.08929598]
-MEAN_BGR = [103.939, 116.779, 123.68]
+MEAN_BGR = [75.08929598, 85.01498926, 75.2051479]
+#MEAN_BGR = [103.939, 116.779, 123.68]
 
-def normalize_input(rgb):
-  return rgb - MEAN_BGR
-  """Changes RGB [0,1] valued image to BGR [0,255] with mean subtracted."""
-  with tf.name_scope('input'), tf.device('/cpu:0'):
-    #rgb -= MEAN_RGB
-    red, green, blue = tf.split(3, 3, rgb)
-    bgr = tf.concat(3, [blue, green, red])
-    #bgr -= MEAN_BGR
-    return bgr
+def get_reader():
+  return reader
 
-def build(image, labels, is_training):
+def normalize_input(img):
+  return img - MEAN_BGR
+  #"""Changes RGB [0,1] valued image to BGR [0,255] with mean subtracted."""
+  #with tf.name_scope('input'), tf.device('/cpu:0'):
+  #  #rgb -= MEAN_RGB
+  #  red, green, blue = tf.split(3, 3, rgb)
+  #  bgr = tf.concat(3, [blue, green, red])
+  #  #bgr -= MEAN_BGR
+  #  return bgr
+
+def _build(image, is_training):
   #def BatchNorm(x, use_local_stat=None, decay=0.9, epsilon=1e-5):
   weight_decay = 1e-4
   bn_params = {
@@ -48,7 +57,8 @@ def build(image, labels, is_training):
     'updates_collections': None,
     'is_training': is_training,
   }
-  init_func = layers.variance_scaling_initializer(mode='FAN_OUT')
+  #init_func = layers.variance_scaling_initializer(mode='FAN_OUT')
+  init_func = layers.variance_scaling_initializer()
 
   def shortcut(l, n_in, n_out, stride):
     if n_in != n_out:
@@ -93,24 +103,44 @@ def build(image, labels, is_training):
   defs = cfg[MODEL_DEPTH]
   
   image = normalize_input(image)
-  image = tf.pad(image, [[0,0],[3,3],[3,3],[0,0]])
+  #image = tf.pad(image, [[0,0],[3,3],[3,3],[0,0]])
   #l = layers.convolution2d(image, 64, 7, stride=2, padding='SAME',
-  l = layers.convolution2d(image, 64, 7, stride=2, padding='VALID',
+  #l = layers.convolution2d(image, 64, 7, stride=2, padding='VALID',
+  l = layers.convolution2d(image, 64, 7, stride=2, padding='SAME',
       activation_fn=tf.nn.relu, weights_initializer=init_func,
       normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
       weights_regularizer=layers.l2_regularizer(weight_decay), scope='conv0')
-  l = layers.max_pool2d(l, 3, stride=2, padding='SAME', scope='pool0')
+  #l = layers.max_pool2d(l, 3, stride=2, padding='SAME', scope='pool0')
+  l = layers.max_pool2d(l, 3, stride=1, padding='SAME', scope='pool0')
   l = layer(l, 'group0', 64, defs[0], 1, first=True)
   l = layer(l, 'group1', 128, defs[1], 2)
   l = layer(l, 'group2', 256, defs[2], 2)
   l = layer(l, 'group3', 512, defs[3], 2)
+  #l = layer(l, 'group3', 512, defs[3], 1)
   l = tf.nn.relu(l)
-  in_k = l.get_shape().as_list()[-2]
+  #in_k = l.get_shape().as_list()[-2]
   #print(l.get_shape().as_list())
   #print(l)
-  l = layers.avg_pool2d(l, kernel_size=in_k, scope='global_avg_pool')
-  l = layers.flatten(l, scope='flatten')
-  logits = layers.fully_connected(l, 1000, activation_fn=None, scope='fc1000')
+  #l = layers.avg_pool2d(l, kernel_size=in_k, scope='global_avg_pool')
+  #l = layers.flatten(l, scope='flatten')
+  #logits = layers.fully_connected(l, FLAGS.num_classes, activation_fn=None, scope='fc1000')
+
+  with arg_scope([layers.convolution2d],
+      stride=1, padding='SAME', activation_fn=tf.nn.relu,
+      normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
+      weights_initializer=init_func,
+      weights_regularizer=layers.l2_regularizer(weight_decay)):
+      l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv1') # faster
+      l = layers.convolution2d(l, 512, kernel_size=7, rate=4, scope='conv2')
+      l = layers.convolution2d(l, 512, kernel_size=3, scope='conv3')
+  logits = layers.convolution2d(l, FLAGS.num_classes, 1, padding='SAME',
+      activation_fn=None, weights_initializer=init_func,
+      #normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
+      #weights_regularizer=layers.l2_regularizer(weight_decay), scope='logits')
+      weights_regularizer=None, scope='logits')
+
+  logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
+                                    name='resize_score')
   return logits
   
 
@@ -135,7 +165,7 @@ def build(image, labels, is_training):
   ##nr_wrong = prediction_incorrect(fc1000, label, 5, name='wrong-top5')
 
 
-def name_conversion(caffe_layer_name):
+def name_conversion(caffe_layer_name, prefix=''):
   """ Convert a caffe parameter name to a tensorflow parameter name as
       defined in the above model """
   # beginning & end mapping
@@ -147,7 +177,7 @@ def name_conversion(caffe_layer_name):
       'conv1/W': 'conv0/weights:0', 'conv1/b': 'conv0/biases:0',
       'fc1000/W': 'fc1000/weights:0', 'fc1000/b': 'fc1000/biases:0'}
   if caffe_layer_name in NAME_MAP:
-    return NAME_MAP[caffe_layer_name]
+    return prefix + NAME_MAP[caffe_layer_name]
 
   s = re.search('([a-z]+)([0-9]+)([a-z]+)_', caffe_layer_name)
   if s is None:
@@ -186,7 +216,7 @@ def name_conversion(caffe_layer_name):
     layer_type = 'convshortcut/' + TYPE_DICT[layer_type]
   tf_name = 'group{}/block{}/{}'.format(int(layer_group) - 2,
       layer_block, layer_type) + tf_name
-  return tf_name
+  return prefix + tf_name
 
 
 def create_init_op(params):
@@ -204,105 +234,58 @@ def create_init_op(params):
       del params[name]
     else:
       print(var.name, ' --> init not found!')
-      raise 1
+      #raise 1
   print(list(params.keys()))
   #print(params['conv0/biases:0'].sum())
   init_op, init_feed = tf.contrib.framework.assign_from_values(init_map)
   return init_op, init_feed
 
 
-if __name__ == '__main__':
-  #parser = argparse.ArgumentParser()
-  #parser.add_argument('--gpu', help='comma separated list of GPU(s) to use.') # nargs='*' in multi mode
-  #parser.add_argument('--load', required=True,
-  #                    help='.npy model file generated by tensorpack.utils.loadcaffe')
-  #parser.add_argument('-d', '--depth', help='resnet depth', required=True, type=int, choices=[50, 101, 152])
-  #parser.add_argument('--input', help='an input image')
-  #parser.add_argument('--eval', help='ILSVRC dir to run validation on')
-  #args = parser.parse_args()
-  #assert args.input or args.eval, "Choose either input or eval!"
+def build(image, labels, weights, num_labels, is_training, reuse=False):
+  if reuse:
+    tf.get_variable_scope().reuse_variables()
+  if is_training:
+    MODEL_PATH ='/home/kivan/datasets/pretrained/resnet/ResNet'+str(MODEL_DEPTH)+'.npy'
+    param = np.load(MODEL_PATH, encoding='latin1').item()
+    resnet_param = {}
+    for k, v in param.items():
+      try:
+        newname = name_conversion(k)
+      except:
+        logger.error("Exception when processing caffe layer {}".format(k))
+        raise
+      #print("Name Transform: " + k + ' --> ' + newname)
+      resnet_param[newname] = v
+      #print(v.shape)
 
-  MODEL_DEPTH = 50
-  MODEL_PATH ='/home/kivan/datasets/pretrained/resnet/ResNet'+str(MODEL_DEPTH)+'.npy'
-  data_path = '/home/kivan/datasets/imagenet/ILSVRC2015/numpy/val_data.hdf5'
+  logits = _build(image, is_training)
+  total_loss = loss(logits, labels, weights, num_labels, is_training)
 
-  param = np.load(MODEL_PATH, encoding='latin1').item()
-  resnet_param = {}
-  for k, v in param.items():
-    try:
-      newname = name_conversion(k)
-    except:
-      logger.error("Exception when processing caffe layer {}".format(k))
-      raise
-    #logger.info("Name Transform: " + k + ' --> ' + newname)
-    resnet_param[newname] = v
-    #print(v.shape)
-
-  img_size = 224
-  image = tf.placeholder(tf.float32, [None, img_size, img_size, 3], 'input')
-  labels = tf.placeholder(tf.int32, [None], 'label')
-  #logits = build(image, labels, is_training=False)
-  logits = build(image, labels, is_training=False)
   #all_vars = tf.contrib.framework.get_variables()
   #for v in all_vars:
   #  print(v.name)
-  init_op, init_feed = create_init_op(resnet_param)
+  if is_training:
+    init_op, init_feed = create_init_op(resnet_param)
+    return total_loss, logits, [logits], init_op, init_feed
+  else:
+    return total_loss, logits, [logits]
 
-  sess = tf.Session()
-  #sess.run(tf.initialize_all_variables())
-  #sess.run(tf.initialize_local_variables())
-  sess.run(init_op, feed_dict=init_feed)
 
-  batch_size = 100
+def loss(logits, labels, weights, num_labels, is_training=True):
+  # TODO
+  #loss_tf = tf.contrib.losses.softmax_cross_entropy()
+  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, num_labels)
+  #loss_val = losses.weighted_hinge_loss(logits, labels, weights, num_labels)
+  #loss_val = losses.flip_xent_loss(logits, labels, weights, num_labels)
+  #loss_val = losses.flip_xent_loss_symmetric(logits, labels, weights, num_labels)
+  all_losses = [loss_val]
 
-  #data = np.load(data_path)
-  #data_x = data[0]
-  #data_y = data[1]
-  h5f = h5py.File(data_path, 'r')
-  data_x = h5f['data_x'][()]
-  print(data_x.shape)
-  data_y = h5f['data_y'][()]
-  h5f.close()
+  # get losses + regularization
+  total_loss = losses.total_loss_sum(all_losses)
 
-  from tensorpack.utils.loadcaffe import get_caffe_pb
-  caffepb = get_caffe_pb()
-  obj = caffepb.BlobProto()
-  mean_file = '/home/kivan/datasets/imagenet/ILSVRC2015/caffe/imagenet_mean.binaryproto'
-  with open(mean_file, 'rb') as f:
-    obj.ParseFromString(f.read())
-  data_mean = np.array(obj.data).reshape((3, 256, 256)).astype('float32')
-  data_mean = np.transpose(data_mean, [1,2,0])
-  if img_size != data_mean.shape[0]:
-    data_mean = cv2.resize(data_mean, (img_size, img_size))
-    #data_mean = ski.transform.resize(data_mean, (img_size, img_size),
-    #                                 preserve_range=True, order=3)
+  if is_training:
+    loss_averages_op = losses.add_loss_summaries(total_loss)
+    with tf.control_dependencies([loss_averages_op]):
+      total_loss = tf.identity(total_loss)
 
-  data_x = data_x.astype(np.float32)
-  #data_x -= data_mean
-  #data_mean = np.array([], dtype=np.float32)
-  #data_mean = data_x.mean(0)
-  #print(data_x.mean((0,1,2)))
-  #print(data_x.std((0,1,2)))
-  N = data_x.shape[0]
-  assert N % batch_size == 0
-  num_batches = N // batch_size
-
-  top5_error = tf.nn.in_top_k(logits, labels, 5)
-  top5_wrong = 0
-  cnt_wrong = 0
-  for i in range(num_batches):
-    offset = i * batch_size
-    batch_x = data_x[offset:offset+batch_size, ...]
-    batch_y = data_y[offset:offset+batch_size, ...]
-    logits_val, top5 = sess.run([logits, top5_error], feed_dict={image:batch_x, labels:batch_y})
-    top5_wrong += (top5==0).sum()
-    yp = logits_val.argmax(1).astype(np.int32)
-    cnt_wrong += (yp != batch_y).sum()
-    if i % 10 == 0:
-      print('[%d / %d] top1error = %.2f - top5error = %.2f' % (i, num_batches,
-            cnt_wrong / ((i+1)*batch_size) * 100,
-            top5_wrong / ((i+1)*batch_size) * 100))
-  print(cnt_wrong / N)
-  print(top5_wrong / N)
-
-  #eval_on_ILSVRC12(resnet_param, args.eval)
+  return total_loss

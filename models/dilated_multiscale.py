@@ -140,6 +140,7 @@ def inference(inputs, is_training=True):
 
 
 def loss(logits, labels, weights, num_labels, is_training=True):
+  #loss_tf = tf.contrib.losses.softmax_cross_entropy()
   loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, num_labels)
   #loss_val = losses.weighted_hinge_loss(logits, labels, weights, num_labels)
   #loss_val = losses.flip_xent_loss(logits, labels, weights, num_labels)
