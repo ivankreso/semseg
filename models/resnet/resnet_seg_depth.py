@@ -12,7 +12,8 @@ from tensorflow.contrib.framework import arg_scope
 
 import losses
 import eval_helper
-import datasets.reader_rgbd_depth as reader
+#import datasets.reader_rgbd_depth as reader
+import datasets.reader_rgbd as reader
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -30,23 +31,26 @@ MEAN_BGR = [75.08929598, 85.01498926, 75.2051479]
 
 
 def evaluate(name, sess, epoch_num, run_ops, dataset, data):
-  eval_helper.evaluate_depth_prediction(name, sess, epoch_num, run_ops, num_examples(dataset))
+  loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation(
+      sess, epoch_num, run_ops, num_examples(dataset))
+  if iou > data['best_iou'][0]:
+    data['best_iou'] = [iou, epoch_num]
 
 def print_results(data):
-  pass
-  #print('Best validation IOU = %.2f (epoch %d)' % tuple(data['best_iou'])
-
-def draw_prediction(name, epoch_num, step, data):
-  yp = data[1]
-  yt = data[2]
-  img_names = data[3]
-  eval_helper.draw_depth_prediction(name, epoch_num, step, yp, yt, img_names)
+  print('Best validation IOU = %.2f (epoch %d)' % tuple(data['best_iou']))
 
 def init_eval_data():
   train_data = {}
   valid_data = {}
   train_data['lr'] = []
-  valid_data['best_loss'] = 1e10
+  train_data['loss'] = []
+  train_data['iou'] = []
+  train_data['accuracy'] = []
+  train_data['best_iou'] = [0, 0]
+  valid_data['best_iou'] = [0, 0]
+  valid_data['loss'] = []
+  valid_data['iou'] = []
+  valid_data['accuracy'] = []
   return train_data, valid_data
 
 def normalize_input(img):
@@ -134,7 +138,7 @@ def _build(image, is_training):
   l = layer(l, 'group2', 256, defs[2], 2)
   l = layer(l, 'group3', 512, defs[3], 2)
   #l = layer(l, 'group3', 512, defs[3], 1)
-  l = tf.nn.relu(l)
+  resnet_out = tf.nn.relu(l)
   #in_k = l.get_shape().as_list()[-2]
   #print(l.get_shape().as_list())
   #print(l)
@@ -147,19 +151,30 @@ def _build(image, is_training):
       normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
       weights_initializer=init_func,
       weights_regularizer=layers.l2_regularizer(weight_decay)):
-      l = layers.convolution2d(l, 512, kernel_size=1, scope='conv1') # faster
-      #l = layers.convolution2d(l, 512, kernel_size=5, rate=4, scope='conv2')
-      l = layers.convolution2d(l, 512, kernel_size=5, scope='conv2')
-      l = layers.convolution2d(l, 512, kernel_size=3, scope='conv3')
-  logits = layers.convolution2d(l, 1, 1, padding='SAME',
-      activation_fn=None, weights_initializer=init_func,
-      #normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
-      #weights_regularizer=layers.l2_regularizer(weight_decay), scope='logits')
-      weights_regularizer=None, scope='logits')
 
-  logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
-                                    name='resize_score')
-  return logits
+    with tf.variable_scope('depth'):
+      l = layers.convolution2d(resnet_out, 512, kernel_size=1, scope='conv1') # faster
+      #l = layers.convolution2d(l, 512, kernel_size=5, rate=4, scope='conv2')
+      l = layers.convolution2d(l, 512, kernel_size=5, rate=2, scope='conv2')
+      #l = layers.convolution2d(l, 512, kernel_size=5, scope='conv2')
+      depth_net = layers.convolution2d(l, 512, kernel_size=3, scope='conv3')
+    with tf.variable_scope('seg'):
+      l = layers.convolution2d(resnet_out, 512, kernel_size=1, scope='conv1') # faster
+      l = layers.convolution2d(l, 512, kernel_size=5, rate=2, scope='conv2')
+      seg_net = layers.convolution2d(l, 512, kernel_size=3, scope='conv3')
+
+  depth_net = layers.convolution2d(depth_net, 1, 1, padding='SAME',
+      activation_fn=None, weights_initializer=init_func,
+      weights_regularizer=None, scope='depth')
+  seg_net = layers.convolution2d(seg_net, FLAGS.num_classes, 1, padding='SAME',
+      activation_fn=None, weights_initializer=init_func,
+      weights_regularizer=None, scope='segnet')
+  seg_net = tf.image.resize_bilinear(seg_net, [FLAGS.img_height, FLAGS.img_width],
+                                     name='resize_segnet_out')
+  depth_net = tf.image.resize_bilinear(depth_net, [FLAGS.img_height, FLAGS.img_width],
+                                     name='resize_depth_out')
+
+  return seg_net, depth_net
   
 
   #with argscope(Conv2D, nl=tf.identity, use_bias=False,
@@ -261,7 +276,7 @@ def create_init_op(params):
 
 def build(dataset, is_training, reuse=False):
   # Get images and labels.
-  x, y, x_names = reader.inputs(dataset, shuffle=is_training, num_epochs=FLAGS.max_epochs)
+  x, labels, weights, depth, img_names = reader.inputs(dataset, shuffle=is_training, num_epochs=FLAGS.max_epochs)
   x = normalize_input(x)
 
   if reuse:
@@ -280,27 +295,29 @@ def build(dataset, is_training, reuse=False):
       resnet_param[newname] = v
       #print(v.shape)
 
-  y_pred = _build(x, is_training)
-  total_loss = loss(y_pred, y, is_training)
+  logits, y_pred = _build(x, is_training)
+  total_loss = loss(logits, y_pred, labels, weights, depth, is_training)
 
   #all_vars = tf.contrib.framework.get_variables()
   #for v in all_vars:
   #  print(v.name)
   if is_training:
     init_op, init_feed = create_init_op(resnet_param)
-    return [total_loss, y_pred, y, x_names], init_op, init_feed
+    return [total_loss], init_op, init_feed
   else:
-    return [total_loss, y_pred, y, x, x_names]
+    return [total_loss, logits, labels, img_names]
 
 
-def loss(yp, yt, is_training=True):
-  loss_val = losses.mse(yp, yt)
+def loss(logits, yp, labels, weights, yt, is_training=True):
+  alpha = 0.05
+  depth_loss = alpha * losses.mse(yp, yt)
   #loss_tf = tf.contrib.losses.softmax_cross_entropy()
-  #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, num_labels)
+  xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights)
   #loss_val = losses.weighted_hinge_loss(logits, labels, weights, num_labels)
   #loss_val = losses.flip_xent_loss(logits, labels, weights, num_labels)
   #loss_val = losses.flip_xent_loss_symmetric(logits, labels, weights, num_labels)
-  all_losses = [loss_val]
+  all_losses = [depth_loss, xent_loss]
+  #all_losses = [xent_loss]
 
   # get losses + regularization
   total_loss = losses.total_loss_sum(all_losses)

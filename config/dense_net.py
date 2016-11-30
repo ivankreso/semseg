@@ -2,8 +2,8 @@ import os
 import tensorflow as tf
 import train_helper
 
-MODEL_PATH = './models/resnet/resnet.py'
-#MODEL_PATH = './models/resnet/resnet_seg_depth.py'
+#MODEL_PATH = './models/dense_net/dense_net.py'
+MODEL_PATH = './models/dense_net/dense_net_full.py'
 SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
                         train_helper.get_time_string())
 
@@ -12,7 +12,7 @@ SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
 #DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
 IMG_WIDTH = 480
-IMG_HEIGHT = 208
+IMG_HEIGHT = 224
 #IMG_WIDTH = 640
 #IMG_HEIGHT = 288
 #IMG_WIDTH = 1024
@@ -23,12 +23,16 @@ DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
 #                           '{}x{}_rgbd/'.format(IMG_WIDTH, IMG_HEIGHT))
 
 
-tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
-# 1e-4 best, 1e-3 is too big
-tf.app.flags.DEFINE_float('initial_learning_rate', 1e-4, '')
+#tf.app.flags.DEFINE_string('optimizer', 'RMSprop', '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
-tf.app.flags.DEFINE_integer('num_epochs_per_decay', 4, '')
-tf.app.flags.DEFINE_integer('batch_size', 3, '')
+# 1e-4 best, 1e-3 is too big
+tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
+tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
+#tf.app.flags.DEFINE_float('initial_learning_rate', 1e-4, '')
+# TODO better 4?
+tf.app.flags.DEFINE_integer('num_epochs_per_decay', 3, '')
+#tf.app.flags.DEFINE_integer('batch_size', 1, '')
+tf.app.flags.DEFINE_integer('batch_size', 2, '')
 tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
 
 #tf.app.flags.DEFINE_string('optimizer', 'Momentum', '')
@@ -38,8 +42,6 @@ tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
 #tf.app.flags.DEFINE_float('momentum', 0.9, '')
 #tf.app.flags.DEFINE_float('num_epochs_per_decay', 3.0,
 #                          """Epochs after which learning rate decays.""")
-
- 
 
 tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.5,
 #tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.2,
@@ -59,10 +61,7 @@ tf.app.flags.DEFINE_integer('net_subsampling', 16, '')
 tf.app.flags.DEFINE_string('model_path', MODEL_PATH, '')
 tf.app.flags.DEFINE_string('dataset_dir', DATASET_DIR, '')
 tf.app.flags.DEFINE_string('debug_dir', os.path.join(SAVE_DIR, 'debug'), '')
-tf.app.flags.DEFINE_string('vgg_init_dir', '/home/kivan/datasets/pretrained/vgg16/', '')
-#tf.app.flags.DEFINE_integer('max_steps', 100000,
-#                            """Number of batches to run.""")
-tf.app.flags.DEFINE_integer('max_epochs', 30, 'Number of epochs to run.')
+tf.app.flags.DEFINE_integer('max_epochs', 60, 'Number of epochs to run.')
 tf.app.flags.DEFINE_integer('num_classes', 19, '')
 tf.app.flags.DEFINE_boolean('log_device_placement', False, 'Whether to log device placement.')
 tf.app.flags.DEFINE_boolean('draw_predictions', False, 'Whether to draw.')

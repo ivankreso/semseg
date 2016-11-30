@@ -14,19 +14,26 @@ tf.app.flags.DEFINE_string('data_dir',
     '/home/kivan/datasets/Cityscapes/2048x1024/', 'Dataset dir')
 #tf.app.flags.DEFINE_integer('img_width', 640, '')
 #tf.app.flags.DEFINE_integer('img_height', 288, '')
-tf.app.flags.DEFINE_integer('img_width', 320, '')
-tf.app.flags.DEFINE_integer('img_height', 144, '')
+#tf.app.flags.DEFINE_integer('img_width', 320, '')
+#tf.app.flags.DEFINE_integer('img_height', 144, '')
 #tf.app.flags.DEFINE_integer('img_width', 1024, '')
 #tf.app.flags.DEFINE_integer('img_height', 448, '')
-tf.app.flags.DEFINE_string('save_dir',
-    '/home/kivan/datasets/Cityscapes/tensorflow/' +
-    #'{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '/', '')
-    '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '_rgbd/', '')
 # leave out the car hood
 tf.app.flags.DEFINE_integer('cx_start', 0, '')
 tf.app.flags.DEFINE_integer('cx_end', 2048, '')
 tf.app.flags.DEFINE_integer('cy_start', 0, '')
 tf.app.flags.DEFINE_integer('cy_end', 900, '')
+#tf.app.flags.DEFINE_integer('img_width', 640, '')
+#tf.app.flags.DEFINE_integer('cx_start', 120, '')
+#tf.app.flags.DEFINE_integer('img_height', 298, '')
+tf.app.flags.DEFINE_integer('img_width', 480, '')
+#tf.app.flags.DEFINE_integer('img_height', 208, '')
+tf.app.flags.DEFINE_integer('img_height', 224, '')
+
+tf.app.flags.DEFINE_string('save_dir',
+    '/home/kivan/datasets/Cityscapes/tensorflow/' +
+    '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '/', '')
+    #'{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '_rgbd/', '')
 
 def _int64_feature(value):
   """Wrapper for inserting int64 features into Example proto."""
@@ -56,12 +63,12 @@ def create_tfrecord(rgb, label_map, weight_map, depth_img,
       'height': _int64_feature(rows),
       'width': _int64_feature(cols),
       'depth': _int64_feature(depth),
-      #'num_labels': _int64_feature(int(num_labels)),
+      'num_labels': _int64_feature(int(num_labels)),
       'img_name': _bytes_feature(img_name.encode()),
       'rgb': _bytes_feature(rgb_str),
-      #'label_weights': _bytes_feature(weights_str),
-      #'labels': _bytes_feature(labels_str),
-      'disparity': _bytes_feature(disp_raw)
+      'label_weights': _bytes_feature(weights_str),
+      'labels': _bytes_feature(labels_str),
+      #'disparity': _bytes_feature(disp_raw)
       }))
   writer.write(example.SerializeToString())
   writer.close()

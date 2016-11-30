@@ -8,17 +8,56 @@ import matplotlib.pyplot as plt
 import skimage as ski
 import skimage.io
 import cv2
+import libs.cylib as cylib
 
 import tensorflow as tf
 FLAGS = tf.app.flags.FLAGS
 
-def evaluate_depth_prediction(sess, epoch_num, run_ops, num_examples):
+from datasets.cityscapes.cityscapes import CityscapesDataset
+
+def evaluate_segmentation(sess, epoch_num, run_ops, num_examples):
+  print('\nValidation performance:')
+  conf_mat = np.ascontiguousarray(
+      np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64))
+  loss_avg = 0
+  for step in range(num_examples):
+    start_time = time.time()
+    loss_val, logits, labels, img_prefix = sess.run(run_ops)
+    duration = time.time() - start_time
+    loss_avg += loss_val
+    #net_labels = out_logits[0].argmax(2).astype(np.int32, copy=False)
+    #net_labels = logits[0].argmax(2).astype(np.int32)
+    net_labels = logits.argmax(3).astype(np.int32)
+    #gt_labels = gt_labels.astype(np.int32, copy=False)
+    cylib.collect_confusion_matrix(net_labels.reshape(-1),
+                                   labels.reshape(-1), conf_mat)
+
+    if step % 10 == 0:
+      num_examples_per_step = FLAGS.batch_size
+      examples_per_sec = num_examples_per_step / duration
+      sec_per_batch = float(duration)
+      format_str = 'epoch %d, step %d / %d, loss = %.2f \
+        (%.1f examples/sec; %.3f sec/batch)'
+      #print('lr = ', clr)
+      print(format_str % (epoch_num, step, num_examples, loss_val,
+                          examples_per_sec, sec_per_batch))
+    if FLAGS.draw_predictions and step % 100 == 0:
+      img_prefix = img_prefix[0].decode("utf-8")
+      save_path = FLAGS.debug_dir + '/val/' + '%03d_' % epoch_num + img_prefix + '.png'
+      draw_output(net_labels, CityscapesDataset.CLASS_INFO, save_path)
+  #print(conf_mat)
+  print('')
+  pixel_acc, iou_acc, recall, precision, _ = compute_errors(
+      conf_mat, 'Validation', CityscapesDataset.CLASS_INFO, verbose=True)
+  return loss_avg / num_examples, pixel_acc, iou_acc, recall, precision
+
+def evaluate_depth_prediction(name, sess, epoch_num, run_ops, num_examples):
   print('\nValidation performance:')
   loss_avg = 0
   N = num_examples
   for step in range(N):
     start_time = time.time()
-    loss_val, yp, yt, x, names = sess.run(run_ops)
+    loss_val, yp, yt, x, img_names = sess.run(run_ops)
     duration = time.time() - start_time
     loss_avg += loss_val
     if step % 20 == 0:
@@ -31,25 +70,28 @@ def evaluate_depth_prediction(sess, epoch_num, run_ops, num_examples):
                           examples_per_sec, sec_per_batch))
     #print(yp)
     if FLAGS.draw_predictions and step % 10 == 0:
-      yp[yp<0] = 0
-      yp[yp>255] = 255
-      yp = yp.astype(np.uint8)
-      yt = yt.reshape(yp.shape).astype(np.uint8)
-      for i in range(len(names)):
-        img_prefix = names[i].decode("utf-8")
-        #save_path = FLAGS.debug_dir + '/val/' + '%03d_' % epoch_num + img_prefix + '.png'
-        save_path = os.path.join(FLAGS.debug_dir, 'val',
-            '%03d_' % epoch_num + img_prefix + '_pred.png')
-        cv2.imwrite(save_path, yp[i])
-        save_path = os.path.join(FLAGS.debug_dir, 'val',
-            '%03d_' % epoch_num + img_prefix + '_gt.png')
-        cv2.imwrite(save_path, yt[i])
+      draw_depth_prediction(name, epoch_num, step, yp, yt, img_names)
 
     #  eval_helper.draw_output(net_labels, CityscapesDataset.CLASS_INFO, save_path)
   loss_avg /= N
   print('Loss = ', loss_avg)
   return loss_avg
 
+
+def draw_depth_prediction(name, epoch_num, step, yp, yt, img_names):
+  yp[yp<0] = 0
+  yp[yp>255] = 255
+  yp = yp.astype(np.uint8)
+  yt = yt.reshape(yp.shape).astype(np.uint8)
+  for i in range(len(img_names)):
+    img_prefix = img_names[i].decode("utf-8")
+    #save_path = FLAGS.debug_dir + '/val/' + '%03d_' % epoch_num + img_prefix + '.png'
+    save_path = os.path.join(FLAGS.debug_dir, name,
+        '%03d_%06d_' % (epoch_num, step) + img_prefix + '_pred.png')
+    cv2.imwrite(save_path, yp[i])
+    save_path = os.path.join(FLAGS.debug_dir, name,
+        '%03d_%06d_' % (epoch_num, step) + img_prefix + '_gt.png')
+    cv2.imwrite(save_path, yt[i])
 
 
 def draw_output(y, class_colors, save_path):

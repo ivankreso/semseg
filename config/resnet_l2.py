@@ -12,7 +12,7 @@ SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets', train_helpe
 #IMG_WIDTH = 320
 #IMG_HEIGHT = 144
 IMG_WIDTH = 640
-IMG_HEIGHT = 288
+IMG_HEIGHT = 298
 #IMG_WIDTH = 1024
 #IMG_HEIGHT = 448
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
@@ -25,7 +25,7 @@ tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
 # 1e-4 best, 1e-3 is too big
 tf.app.flags.DEFINE_float('initial_learning_rate', 1e-2, '')
 tf.app.flags.DEFINE_integer('num_epochs_per_decay', 3, '')
-tf.app.flags.DEFINE_integer('batch_size', 5, '')
+tf.app.flags.DEFINE_integer('batch_size', 2, '')
 
 #tf.app.flags.DEFINE_string('optimizer', 'Momentum', '')
 ##tf.app.flags.DEFINE_float('initial_learning_rate', 2e-4,

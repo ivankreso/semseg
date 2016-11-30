@@ -7,6 +7,7 @@ import skimage as ski
 import skimage.data
 import skimage.transform
 import cv2
+import eval_helper
 
 import tensorflow.contrib.layers as layers
 from tensorflow.contrib.framework import arg_scope
@@ -28,14 +29,34 @@ MODEL_DEPTH = 50
 MEAN_BGR = [75.08929598, 85.01498926, 75.2051479]
 #MEAN_BGR = [103.939, 116.779, 123.68]
 
-def get_reader():
-  return reader
+
+def evaluate(name, sess, epoch_num, run_ops, dataset, data):
+  loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation(
+      sess, epoch_num, run_ops, num_examples(dataset))
+  if iou > data['best_iou'][0]:
+    data['best_iou'] = [iou, epoch_num]
+
+def print_results(data):
+  print('Best validation IOU = %.2f (epoch %d)' % tuple(data['best_iou']))
+
+def init_eval_data():
+  train_data = {}
+  valid_data = {}
+  train_data['lr'] = []
+  train_data['loss'] = []
+  train_data['iou'] = []
+  train_data['accuracy'] = []
+  train_data['best_iou'] = [0, 0]
+  valid_data['best_iou'] = [0, 0]
+  valid_data['loss'] = []
+  valid_data['iou'] = []
+  valid_data['accuracy'] = []
+  return train_data, valid_data
 
 def normalize_input(img):
   return img - MEAN_BGR
   #"""Changes RGB [0,1] valued image to BGR [0,255] with mean subtracted."""
   #with tf.name_scope('input'), tf.device('/cpu:0'):
-  #  #rgb -= MEAN_RGB
   #  red, green, blue = tf.split(3, 3, rgb)
   #  bgr = tf.concat(3, [blue, green, red])
   #  #bgr -= MEAN_BGR
@@ -102,7 +123,6 @@ def _build(image, is_training):
   }
   defs = cfg[MODEL_DEPTH]
   
-  image = normalize_input(image)
   #image = tf.pad(image, [[0,0],[3,3],[3,3],[0,0]])
   #l = layers.convolution2d(image, 64, 7, stride=2, padding='SAME',
   #l = layers.convolution2d(image, 64, 7, stride=2, padding='VALID',
@@ -131,7 +151,7 @@ def _build(image, is_training):
       weights_initializer=init_func,
       weights_regularizer=layers.l2_regularizer(weight_decay)):
       l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv1') # faster
-      l = layers.convolution2d(l, 512, kernel_size=7, rate=4, scope='conv2')
+      #l = layers.convolution2d(l, 512, kernel_size=7, rate=4, scope='conv2')
       l = layers.convolution2d(l, 512, kernel_size=3, scope='conv3')
   logits = layers.convolution2d(l, FLAGS.num_classes, 1, padding='SAME',
       activation_fn=None, weights_initializer=init_func,
@@ -241,7 +261,12 @@ def create_init_op(params):
   return init_op, init_feed
 
 
-def build(image, labels, weights, num_labels, is_training, reuse=False):
+def build(dataset, is_training, reuse=False):
+  # Get images and labels.
+  image, labels, weights, num_labels, img_names = reader.inputs(
+      dataset, shuffle=is_training, num_epochs=FLAGS.max_epochs)
+  image = normalize_input(image)
+
   if reuse:
     tf.get_variable_scope().reuse_variables()
   if is_training:
@@ -266,15 +291,15 @@ def build(image, labels, weights, num_labels, is_training, reuse=False):
   #  print(v.name)
   if is_training:
     init_op, init_feed = create_init_op(resnet_param)
-    return total_loss, logits, [logits], init_op, init_feed
+    return [total_loss], init_op, init_feed
   else:
-    return total_loss, logits, [logits]
+    return [total_loss, logits, labels, img_names]
 
 
 def loss(logits, labels, weights, num_labels, is_training=True):
   # TODO
   #loss_tf = tf.contrib.losses.softmax_cross_entropy()
-  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, num_labels)
+  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights)
   #loss_val = losses.weighted_hinge_loss(logits, labels, weights, num_labels)
   #loss_val = losses.flip_xent_loss(logits, labels, weights, num_labels)
   #loss_val = losses.flip_xent_loss_symmetric(logits, labels, weights, num_labels)
@@ -289,3 +314,6 @@ def loss(logits, labels, weights, num_labels, is_training=True):
       total_loss = tf.identity(total_loss)
 
   return total_loss
+
+def num_examples(dataset):
+  return reader.num_examples(dataset)
