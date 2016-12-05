@@ -2,7 +2,8 @@ import os
 import tensorflow as tf
 import train_helper
 
-MODEL_PATH = './models/resnet/resnet.py'
+#MODEL_PATH = './models/resnet/resnet.py'
+MODEL_PATH = './models/resnet/resnet_refine.py'
 #MODEL_PATH = './models/resnet/resnet_seg_depth.py'
 SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
                         train_helper.get_time_string())
@@ -11,10 +12,10 @@ SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
 #IMG_HEIGHT = 1024
 #DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
-IMG_WIDTH = 480
-IMG_HEIGHT = 208
-#IMG_WIDTH = 640
-#IMG_HEIGHT = 288
+#IMG_WIDTH = 480
+#IMG_HEIGHT = 224
+IMG_WIDTH = 640
+IMG_HEIGHT = 288
 #IMG_WIDTH = 1024
 #IMG_HEIGHT = 448
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
@@ -25,10 +26,11 @@ DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
 
 tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
 # 1e-4 best, 1e-3 is too big
-tf.app.flags.DEFINE_float('initial_learning_rate', 1e-4, '')
-#tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
-tf.app.flags.DEFINE_integer('num_epochs_per_decay', 4, '')
-tf.app.flags.DEFINE_integer('batch_size', 3, '')
+#tf.app.flags.DEFINE_float('initial_learning_rate', 1e-4, '')
+tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 4, '')
+tf.app.flags.DEFINE_integer('num_epochs_per_decay', 8, '')
+tf.app.flags.DEFINE_integer('batch_size', 1, '')
 tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
 
 #tf.app.flags.DEFINE_string('optimizer', 'Momentum', '')
@@ -39,7 +41,6 @@ tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
 #tf.app.flags.DEFINE_float('num_epochs_per_decay', 3.0,
 #                          """Epochs after which learning rate decays.""")
 
- 
 
 tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.5,
 #tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.2,

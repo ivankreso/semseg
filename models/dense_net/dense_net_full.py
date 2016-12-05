@@ -75,8 +75,8 @@ def layer(net, num_filters, name, is_training):
     net = tf.contrib.layers.batch_norm(net, **bn_params)
     net = tf.nn.relu(net)
     net = layers.convolution2d(net, num_filters, kernel_size=3)
-    if is_training: 
-      net = tf.nn.dropout(net, keep_prob=0.8)
+    #if is_training: 
+      #net = tf.nn.dropout(net, keep_prob=0.8)
   return net
 
 def dense_block(net, size, r, name, is_training):
@@ -100,8 +100,8 @@ def downsample(net, name, is_training):
     net = tf.nn.relu(net)
     num_filters = net.get_shape().as_list()[3]
     net = layers.convolution2d(net, num_filters, kernel_size=1)
-    if is_training:
-      net = tf.nn.dropout(net, keep_prob=0.8)
+    #if is_training:
+    #  net = tf.nn.dropout(net, keep_prob=0.8)
     net = layers.max_pool2d(net, 2, stride=2, padding='SAME')
   return net
 
@@ -119,7 +119,7 @@ def _build(image, is_training):
 
   cfg = {
     #5: [4,5,7,10,12,15],
-    5: [2,2,4,5,6,7],
+    5: [2,3,4,5,6,8],
     #5: [3,3,3,3,3,3],
     #5: [3,3,3],
     #5: [2,2],
@@ -144,10 +144,10 @@ def _build(image, is_training):
       print(net)
       if i < len(block_sizes) - 1:
         net = downsample(net, 'block'+str(i)+'_downsample', is_training)
-    logits_mid = layers.convolution2d(net, FLAGS.num_classes, 1,
-        biases_initializer=tf.zeros_initializer, scope='logits_middle')
-    logits_mid = tf.image.resize_bilinear(logits_mid, [FLAGS.img_height, FLAGS.img_width],
-                                      name='resize_logits_middle')
+    #logits_mid = layers.convolution2d(net, FLAGS.num_classes, 1,
+    #    biases_initializer=tf.zeros_initializer, scope='logits_middle')
+    #logits_mid = tf.image.resize_bilinear(logits_mid, [FLAGS.img_height, FLAGS.img_width],
+    #                                  name='resize_logits_middle')
     for i, size in reversed(list(enumerate(block_sizes[:-1]))):
       print(i, size)
       net = upsample(net, 'block'+str(i)+'_back_upsample')
@@ -160,8 +160,7 @@ def _build(image, is_training):
         biases_initializer=tf.zeros_initializer, scope='logits')
     #logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
     #                                  name='resize_logits')
-
-  return logits, logits_mid
+  return logits, None
 
 
 def build(dataset, is_training, reuse=False):
@@ -189,10 +188,12 @@ def build(dataset, is_training, reuse=False):
 def loss(logits, logits_mid, labels, weights, is_training=True):
 #def loss(logits, labels, weights, is_training=True):
   xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights)
+  #xent_loss += losses.weighted_cross_entropy_loss(logits_mid, labels, weights)
+  #xent_loss /= 2
+
   #xent_loss = losses.weighted_cross_entropy_loss(logits, labels)
   #xent_loss += losses.weighted_cross_entropy_loss(logits_mid, labels)
-  xent_loss += losses.weighted_cross_entropy_loss(logits_mid, labels, weights)
-  xent_loss /= 2
+
   #loss_tf = tf.contrib.losses.softmax_cross_entropy()
   #loss_val = losses.weighted_hinge_loss(logits, labels, weights, num_labels)
   #loss_val = losses.flip_xent_loss(logits, labels, weights, num_labels)

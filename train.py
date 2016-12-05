@@ -95,8 +95,8 @@ def train(model, train_dataset, valid_dataset):
 
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
-    if init_op != None:
-      sess.run(init_op, feed_dict=init_feed)
+    #if init_op != None:
+    #  sess.run(init_op, feed_dict=init_feed)
 
     if len(FLAGS.resume_path) > 0:
       print('\nRestoring params from:', FLAGS.resume_path)
@@ -163,12 +163,11 @@ def train(model, train_dataset, valid_dataset):
         #                                 yt.reshape(-1), conf_mat)
         #img_prefix = img_prefix[0].decode("utf-8")
 
-        if FLAGS.draw_predictions and step % 50 == 0:
-          model.draw_prediction('train', epoch_num, step, ret_val)
+        #if FLAGS.draw_predictions and step % 50 == 0:
+        #  model.draw_prediction('train', epoch_num, step, ret_val)
 
         if step % 20 == 0:
-          num_examples_per_step = FLAGS.batch_size
-          examples_per_sec = num_examples_per_step / duration
+          examples_per_sec = FLAGS.batch_size / duration
           sec_per_batch = float(duration)
 
           format_str = '%s: epoch %d, step %d / %d, loss = %.2f \

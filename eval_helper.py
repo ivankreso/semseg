@@ -22,7 +22,12 @@ def evaluate_segmentation(sess, epoch_num, run_ops, num_examples):
   loss_avg = 0
   for step in range(num_examples):
     start_time = time.time()
-    loss_val, logits, labels, img_prefix = sess.run(run_ops)
+    if len(run_ops) == 4:
+      loss_val, logits, labels, img_names = sess.run(run_ops)
+    elif len(run_ops) == 5:
+      loss_val, logits, labels, img_names, logits_mid = sess.run(run_ops)
+    else:
+      raise ValueError()
     duration = time.time() - start_time
     loss_avg += loss_val
     #net_labels = out_logits[0].argmax(2).astype(np.int32, copy=False)
@@ -32,19 +37,27 @@ def evaluate_segmentation(sess, epoch_num, run_ops, num_examples):
     cylib.collect_confusion_matrix(net_labels.reshape(-1),
                                    labels.reshape(-1), conf_mat)
 
-    if step % 10 == 0:
+    #if step % 10 == 0:
+    if step % 1 == 0:
       num_examples_per_step = FLAGS.batch_size
       examples_per_sec = num_examples_per_step / duration
       sec_per_batch = float(duration)
-      format_str = 'epoch %d, step %d / %d, loss = %.2f \
-        (%.1f examples/sec; %.3f sec/batch)'
-      #print('lr = ', clr)
-      print(format_str % (epoch_num, step, num_examples, loss_val,
-                          examples_per_sec, sec_per_batch))
-    if FLAGS.draw_predictions and step % 100 == 0:
-      img_prefix = img_prefix[0].decode("utf-8")
-      save_path = FLAGS.debug_dir + '/val/' + '%03d_' % epoch_num + img_prefix + '.png'
-      draw_output(net_labels, CityscapesDataset.CLASS_INFO, save_path)
+      if step % 20 == 0:
+        format_str = 'epoch %d, step %d / %d, loss = %.2f \
+          (%.1f examples/sec; %.3f sec/batch)'
+        #print('lr = ', clr)
+        print(format_str % (epoch_num, step, num_examples, loss_val,
+                            examples_per_sec, sec_per_batch))
+    if FLAGS.draw_predictions and step % 20 == 0:
+      for i in range(net_labels.shape[0]):
+        img_prefix = img_names[i].decode("utf-8")
+        #save_path = FLAGS.debug_dir + '/valid/' + '%03d_' % epoch_num + img_prefix + '.png'
+        save_path = FLAGS.debug_dir + '/valid/' + img_prefix + '.png'
+        draw_output(net_labels[i], CityscapesDataset.CLASS_INFO, save_path)
+        #mid_labels = logits_mid[i].argmax(2).astype(np.int32)
+        #save_path = FLAGS.debug_dir + '/valid/' + '%03d_' % epoch_num + img_prefix + '_mid.png'
+        #save_path = FLAGS.debug_dir + '/valid/' + img_prefix + '_mid.png'
+        #draw_output(mid_labels, CityscapesDataset.CLASS_INFO, save_path)
   #print(conf_mat)
   print('')
   pixel_acc, iou_acc, recall, precision, _ = compute_errors(

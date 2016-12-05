@@ -55,7 +55,8 @@ def mse(yp, yt):
     return tf.reduce_mean(tf.square(yt - yp))
 
 
-def weighted_cross_entropy_loss(logits, labels, weights=None, max_weight=1e2):
+def weighted_cross_entropy_loss(logits, labels, weights=None, max_weight=10):
+#def weighted_cross_entropy_loss(logits, labels, weights=None, max_weight=1e2):
 #def weighted_cross_entropy_loss(logits, labels, weights=None, max_weight=1e3):
   print('loss: Weighted Cross Entropy Loss')
   num_examples = FLAGS.batch_size * FLAGS.img_height * FLAGS.img_width
