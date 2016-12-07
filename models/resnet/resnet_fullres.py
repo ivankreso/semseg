@@ -62,30 +62,51 @@ def normalize_input(img):
   #  #bgr -= MEAN_BGR
   #  return bgr
 
-def build_refinement_module(top_layer, skip_data):
-  skip_layer = skip_data[0]
-  size_bottom = skip_data[1]
-  skip_name = skip_data[2]
-  top_height = top_layer.get_shape()[1].value
-  top_width = top_layer.get_shape()[2].value
-  size_top = top_layer.get_shape()[3].value
-
-  top_layer = tf.image.resize_bilinear(top_layer, [2*top_height, 2*top_width],
-                                 name=skip_name + '_refine_upsample')
-  #print('size_top = ', top_height, top_width, size_top)
-  #skip_layer = convolve(skip_layer, size_top, 3, skip_name + '_refine_prep')
-  skip_layer = layers.convolution2d(skip_layer, size_top, kernel_size=3,
-      scope=skip_name+'_refine_prep')
-  net = tf.concat(3, [top_layer, skip_layer])
-  #print(net)
-  #net = convolve(net, size_bottom, 3, skip_name + '_refine_fuse')
-  net = layers.convolution2d(net, size_bottom, kernel_size=3,
-      scope=skip_name+'_refine_fuse')
+def layer(net, num_filters, name, is_training):
+  with tf.variable_scope(name):
+    net = tf.contrib.layers.batch_norm(net, **bn_params)
+    net = tf.nn.relu(net)
+    net = layers.convolution2d(net, num_filters, kernel_size=3)
+    #if is_training: 
+      #net = tf.nn.dropout(net, keep_prob=0.8)
   return net
+
+def dense_block(net, size, r, name, is_training):
+  with tf.variable_scope(name):
+    outputs = []
+    for i in range(size):
+      if i < size - 1:
+        x = net
+        net = layer(net, r, 'layer'+str(i), is_training)
+        outputs += [net]
+        net = tf.concat(3, [x, net])
+      else:
+        net = layer(net, r, 'layer'+str(i), is_training)
+        outputs += [net]
+    net = tf.concat(3, outputs)
+  return net
+
+def downsample(net, name, is_training):
+  with tf.variable_scope(name):
+    net = tf.contrib.layers.batch_norm(net)
+    net = tf.nn.relu(net)
+    num_filters = net.get_shape().as_list()[3]
+    net = layers.convolution2d(net, num_filters, kernel_size=1)
+    #if is_training:
+    #  net = tf.nn.dropout(net, keep_prob=0.8)
+    net = layers.max_pool2d(net, 2, stride=2, padding='SAME')
+  return net
+
+def upsample(net, name):
+  with tf.variable_scope(name):
+    num_filters = net.get_shape().as_list()[3]
+    net = tf.contrib.layers.convolution2d_transpose(net, num_filters, kernel_size=3, stride=2)
+    return net
 
 def _build(image, is_training):
   #def BatchNorm(x, use_local_stat=None, decay=0.9, epsilon=1e-5):
   weight_decay = 1e-4
+  global bn_params
   bn_params = {
     # Decay for the moving averages.
     #'decay': 0.999,
@@ -143,27 +164,26 @@ def _build(image, is_training):
       152: ([3,8,36,3])
   }
   defs = cfg[MODEL_DEPTH]
-  skip_connections = []
-  km = 128
   
+  skip_layers = []
   #image = tf.pad(image, [[0,0],[3,3],[3,3],[0,0]])
   #l = layers.convolution2d(image, 64, 7, stride=2, padding='SAME',
   #l = layers.convolution2d(image, 64, 7, stride=2, padding='VALID',
-  #l = layers.convolution2d(image, 64, 7, stride=2, padding='SAME',
-  l = layers.convolution2d(image, 64, 7, stride=1, padding='SAME',
+  l = layers.convolution2d(image, 64, 7, stride=2, padding='SAME',
       activation_fn=tf.nn.relu, weights_initializer=init_func,
       normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
       weights_regularizer=layers.l2_regularizer(weight_decay), scope='conv0')
-  #l = layers.max_pool2d(l, 3, stride=2, padding='SAME', scope='pool0')
+  l = layers.max_pool2d(l, 3, stride=2, padding='SAME', scope='pool0')
   #l = layers.max_pool2d(l, 3, stride=1, padding='SAME', scope='pool0')
-  l = layers.max_pool2d(l, 2, stride=2, padding='SAME', scope='pool0')
   l = layer(l, 'group0', 64, defs[0], 1, first=True)
-  skip_connections += [[l, km/2, 'skip0']]
+  print(l)
+  skip_layers += [l]
   l = layer(l, 'group1', 128, defs[1], 2)
-  skip_connections += [[l, km, 'skip1']]
+  skip_layers += [l]
   l = layer(l, 'group2', 256, defs[2], 2)
-  skip_connections += [[l, km, 'skip2']]
+  skip_layers += [l]
   l = layer(l, 'group3', 512, defs[3], 2)
+  print(l)
   #l = layer(l, 'group3', 512, defs[3], 1)
   l = tf.nn.relu(l)
   #in_k = l.get_shape().as_list()[-2]
@@ -179,18 +199,29 @@ def _build(image, is_training):
       weights_initializer=init_func,
       weights_regularizer=layers.l2_regularizer(weight_decay)):
       l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv1') # faster
-      print(l)
-      l = layers.convolution2d(l, 512, kernel_size=7, rate=2, scope='conv2')
+      l = layers.convolution2d(l, 512, kernel_size=5, rate=2, scope='conv2')
       #l = layers.convolution2d(l, 512, kernel_size=3, scope='conv3')
+      #skip_layers += [l]
 
-  for skip_layer in reversed(skip_connections):
-    l = build_refinement_module(l, skip_layer)
+  net = l
+  #block_sizes = [3,4,5]
+  block_sizes = [4,5,6]
+  r = 12
+  for i, size in reversed(list(enumerate(block_sizes))):
+    print(i, size)
+    net = upsample(net, 'group'+str(i)+'_back_upsample')
+    net = tf.concat(3, [skip_layers[i], net])
+    print(net)
+    net = dense_block(net, size, r, 'group'+str(i)+'_back', is_training)
+    print(net)
+  logits = layers.convolution2d(net, FLAGS.num_classes, 1,
+      biases_initializer=tf.zeros_initializer, scope='logits')
 
-  logits = layers.convolution2d(l, FLAGS.num_classes, 1, padding='SAME',
-      activation_fn=None, weights_initializer=init_func,
-      #normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
-      #weights_regularizer=layers.l2_regularizer(weight_decay), scope='logits')
-      weights_regularizer=None, scope='logits')
+  #logits = layers.convolution2d(l, FLAGS.num_classes, 1, padding='SAME',
+  #    activation_fn=None, weights_initializer=init_func,
+  #    #normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
+  #    #weights_regularizer=layers.l2_regularizer(weight_decay), scope='logits')
+  #    weights_regularizer=None, scope='logits')
 
   logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
                                     name='resize_score')

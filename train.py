@@ -8,7 +8,6 @@ import tensorflow as tf
 
 import libs.cylib as cylib
 import helper
-import eval_helper
 import train_helper
 from datasets.cityscapes.cityscapes import CityscapesDataset
 
@@ -95,8 +94,8 @@ def train(model, train_dataset, valid_dataset):
 
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
-    #if init_op != None:
-    #  sess.run(init_op, feed_dict=init_feed)
+    if init_op != None:
+      sess.run(init_op, feed_dict=init_feed)
 
     if len(FLAGS.resume_path) > 0:
       print('\nRestoring params from:', FLAGS.resume_path)
