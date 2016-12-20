@@ -2,7 +2,7 @@ from datetime import datetime
 import time
 import tensorflow as tf
 import numpy as np
-
+import collections
 
 class Logger(object):
   def __init__(self, *files):
@@ -26,15 +26,46 @@ def print_grad_stats(grads, grad_tensors):
     print('std = ', grad.std())
   print()
 
+def get_variables(sess):
+  #var_list = tf.global_variables()
+  var_list = tf.trainable_variables()
+  #var_map = {}
+  var_map = collections.OrderedDict()
+  for var in var_list:
+    var_map[var.name] = var.eval(session=sess)
+    #print(var_map[var.name])
+    #print(var.name)
+  return var_map
+
+def print_variable_diff(sess, init_vars):
+  curr_vars = get_variables(sess)
+  for k in curr_vars.keys():
+    v0 = init_vars[k]
+    v1 = curr_vars[k]
+    norm = np.linalg.norm(v0-v1)
+    mae = (np.absolute(v0-v1)).mean()
+    print(k, ' --> ', norm, ' :: ', mae)
 
 def get_variable_map():
-  var_list = tf.all_variables()
+  var_list = tf.global_variables()
   var_map = {}
   for var in var_list:
     var_map[var.name] = var
     #print(var.name)
   return var_map
 
+
+def get_num_params():
+  var_list = tf.global_variables()
+  num_params = 0
+  for var in var_list:
+    #print(var.name, var.get_shape())
+    shape = var.get_shape().as_list()
+    n = 1
+    for dim in shape:
+      n *= dim
+    num_params += n
+  return num_params
 
 def get_time_string():
   time = datetime.now()

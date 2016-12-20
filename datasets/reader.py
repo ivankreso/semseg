@@ -51,7 +51,7 @@ def num_examples(dataset):
   return int(dataset.num_examples() / FLAGS.batch_size)
 
 
-def inputs(dataset, shuffle=True, num_epochs=None):
+def inputs(dataset, is_training=False, num_epochs=None):
   """Reads input data num_epochs times.
 
   Args:
@@ -63,6 +63,11 @@ def inputs(dataset, shuffle=True, num_epochs=None):
     * images is a float tensor with shape [batch_size, mnist.IMAGE_PIXELS]
     * labels is an int32 tensor with shape [batch_size] with the true label
   """
+  shuffle = is_training
+  if is_training:
+    batch_size = FLAGS.batch_size
+  else:
+    batch_size = 1
 
   with tf.name_scope('input'), tf.device('/cpu:0'):
     filename_queue = tf.train.string_input_producer(dataset.get_filenames(), num_epochs=num_epochs,
@@ -75,58 +80,8 @@ def inputs(dataset, shuffle=True, num_epochs=None):
     # Shuffle the examples and collect them into batch_size batches.
     # Run this in two threads to avoid being a bottleneck.
     image, labels, weights, num_labels, img_name = tf.train.batch(
-        [image, labels, weights, num_labels, img_name], batch_size=FLAGS.batch_size, num_threads=2,
-        capacity=64)
-
-    return image, labels, weights, num_labels, img_name
-
-
-def inputs_single_epoch(sess, dataset, shuffle=True):
-  batch_size = FLAGS.batch_size
-  
-  with tf.name_scope('input'), tf.device('/cpu:0'):
-  #with tf.name_scope('input'):
-    if shuffle:
-      filename_queue = tf.RandomShuffleQueue(capacity=dataset.num_examples(),
-                                             min_after_dequeue=0, dtypes=tf.string)
-      #filename_queue = tf.FIFOQueue(capacity=dataset.num_examples(), dtypes=tf.string)
-    else:
-      filename_queue = tf.FIFOQueue(capacity=dataset.num_examples(), dtypes=tf.string)
-    enqueue_placeholder = tf.placeholder(dtype=tf.string)
-    enqueue_op = filename_queue.enqueue(enqueue_placeholder)
-    dataset.enqueue(sess, enqueue_op, enqueue_placeholder)
-    sess.run(filename_queue.close())
-
-    image, labels, weights, num_labels, img_name = _read_and_decode(filename_queue)
-
-    image, labels, weights, num_labels, img_name = tf.train.batch(
         [image, labels, weights, num_labels, img_name], batch_size=batch_size, num_threads=2,
         capacity=64)
 
     return image, labels, weights, num_labels, img_name
-
-#def inputs_for_inference(sess, dataset):
-#  batch_size = FLAGS.batch_size
-#  
-#  with tf.name_scope('input'), tf.device('/cpu:0'):
-#  #with tf.name_scope('input'):
-#    filename_queue = tf.FIFOQueue(capacity=dataset.num_examples(), dtypes=tf.string)
-#    enqueue_placeholder = tf.placeholder(dtype=tf.string)
-#    enqueue_op = filename_queue.enqueue(enqueue_placeholder)
-#    for f in dataset.get_filenames():
-#      sess.run([enqueue_op], feed_dict={enqueue_placeholder: f})
-#    sess.run(filename_queue.close())
-#
-#    image, labels, weights, num_labels, img_name = read_and_decode(filename_queue)
-#
-#    images, labels, weights, num_labels, img_name = tf.train.batch(
-#        [image, labels, weights, num_labels, img_name], batch_size=batch_size, num_threads=2,
-#        capacity=64)
-#
-#    num_pixels = FLAGS.img_height * FLAGS.img_width
-#    labels = tf.reshape(labels, shape=[num_pixels])
-#    weights = tf.reshape(weights, shape=[num_pixels])
-#    num_labels = tf.reshape(num_labels, shape=[])
-#
-#    return images, labels, weights, num_labels, img_name, filename_queue
 

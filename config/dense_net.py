@@ -3,7 +3,8 @@ import tensorflow as tf
 import train_helper
 
 #MODEL_PATH = './models/dense_net/dense_net.py'
-MODEL_PATH = './models/dense_net/dense_net_full.py'
+#MODEL_PATH = './models/dense_net/dense_net_full.py'
+MODEL_PATH = './models/dense_net/dense_net_depth.py'
 SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
                         train_helper.get_time_string())
 
@@ -13,10 +14,10 @@ SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
 
 #IMG_WIDTH = 480
 #IMG_HEIGHT = 224
-#IMG_WIDTH = 640
-#IMG_HEIGHT = 288
-IMG_WIDTH = 1024
-IMG_HEIGHT = 448
+IMG_WIDTH = 640
+IMG_HEIGHT = 288
+#IMG_WIDTH = 1024
+#IMG_HEIGHT = 448
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
                            '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 #DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',

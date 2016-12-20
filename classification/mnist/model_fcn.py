@@ -58,8 +58,11 @@ def downsample(net, name, is_training):
 
 def upsample(net, name):
   with tf.variable_scope(name):
-    num_filters = net.get_shape().as_list()[3]
-    net = tf.contrib.layers.convolution2d_transpose(net, num_filters, kernel_size=3, stride=2)
+    height, width = net.get_shape().as_list()[1:3]
+    print(height, width)
+    net = tf.image.resize_bilinear(net, [2*height, 2*width])
+    #num_filters = net.get_shape().as_list()[3]
+    #net = tf.contrib.layers.convolution2d_transpose(net, num_filters, kernel_size=3, stride=2)
     return net
 
 def _build(image, num_classes, is_training):
@@ -79,10 +82,9 @@ def _build(image, num_classes, is_training):
   #init_func = layers.variance_scaling_initializer(mode='FAN_OUT')
   init_func = layers.variance_scaling_initializer()
 
-  cfg = {
-    2: [3,4,5],
-  }
-  block_sizes = cfg[2]
+    #2: [3,4,5],
+  #block_sizes = [2,3,4]
+  block_sizes = [2,3,4,5]
   r = 16
   
   with arg_scope([layers.convolution2d, layers.convolution2d_transpose],
@@ -102,6 +104,7 @@ def _build(image, num_classes, is_training):
         if i < len(block_sizes) - 1:
           net = downsample(net, 'block'+str(i)+'_downsample', is_training)
         print(net)
+        #net = tf.Print(net, [tf.reduce_sum(net)], message=str(i)+' classif1 out = ')
       #logits_mid = layers.convolution2d(net, FLAGS.num_classes, 1,
       #    biases_initializer=tf.zeros_initializer, scope='logits_middle')
       #logits_mid = tf.image.resize_bilinear(logits_mid, [FLAGS.img_height, FLAGS.img_width],
@@ -119,19 +122,31 @@ def _build(image, num_classes, is_training):
       print(net)
       net = dense_block(net, size, r, 'block'+str(i)+'_back', is_training)
       print(net)
+      #net = tf.Print(net, [tf.reduce_sum(net)], message=str(i)+' out = ')
 
     mask = layers.convolution2d(net, 1, 1, biases_initializer=tf.zeros_initializer,
         scope='mask')
-    mask = tf.nn.relu(mask)
-    l1_scale = 1e-3
-    #l1_scale = 1e-6
-    l1_regularizer = layers.l1_regularizer(l1_scale)
-    l1_loss = l1_regularizer(mask)
+    #mask = tf.nn.relu(mask)
+    #mask = tf.minimum(tf.nn.relu(mask), 1)
+    mask = tf.sigmoid(mask)
+    #mask = tf.Print(mask, [tf.reduce_sum(mask)], message='mask sum = ')
+    #reg_scale = 1e-5
+    reg_scale = 1e-6
+    #reg_scale = 1e-4
+    # works!
+    #reg_scale = 5e-6
+    #reg_scale = 5e-6
+    mask_regularizer = layers.l1_regularizer(reg_scale)
+    print(mask_regularizer)
+    #mask_regularizer = layers.l2_regularizer(reg_scale)
+    reg_loss = mask_regularizer(mask)
+    #reg_loss = tf.reduce_mean(mask_regularizer(mask))
     #l1_loss = 0
     image = tf.mul(image, mask)
 
     #tf.get_variable_scope().reuse_variables()
     with tf.variable_scope('classifier', reuse=True):
+    #with tf.variable_scope('classifier2'):
       net = layers.convolution2d(image, 48, 3, scope='conv0')
       for i, size in enumerate(block_sizes):
         print(i, size)
@@ -141,6 +156,8 @@ def _build(image, num_classes, is_training):
         if i < len(block_sizes) - 1:
           net = downsample(net, 'block'+str(i)+'_downsample', is_training)
         print(net)
+        #net = tf.Print(net, [tf.reduce_sum(net)], message=str(i)+' classif2 out = ')
+
     #logits = layers.convolution2d(net, num_classes, 1, biases_initializer=tf.zeros_initializer,
     #    scope='logits')
 
@@ -149,15 +166,19 @@ def _build(image, num_classes, is_training):
       normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
       weights_initializer=layers.variance_scaling_initializer(),
       weights_regularizer=layers.l2_regularizer(weight_decay)):
+    #net = layers.flatten(net, scope='flatten')
+    #net = tf.contrib.layers.avg_pool2d(net, kernel_size=4, scope='avg_pool')
+    net = tf.contrib.layers.max_pool2d(net, kernel_size=4, scope='avg_pool')
+    #net = tf.Print(net, [tf.reduce_sum(net)], message=str(i)+' maxpool out = ')
     net = layers.flatten(net, scope='flatten')
-    #net = layers.fully_connected(net, 512, scope='fc3')
-    #net = layers.fully_connected(net, 256, scope='fc4')
     net = layers.fully_connected(net, 256, scope='fc3')
+    #net = tf.Print(net, [tf.reduce_sum(net)], message=str(i)+' fc1 out = ')
     net = layers.fully_connected(net, 128, scope='fc4')
-  logits = layers.fully_connected(net, num_classes, activation_fn=None,
-      weights_regularizer=layers.l2_regularizer(weight_decay), scope='logits')
+    #net = tf.Print(net, [tf.reduce_sum(net)], message=str(i)+' fc2 out = ')
+  logits = layers.fully_connected(net, num_classes, activation_fn=None, scope='logits')
+  #logits = tf.Print(logits, [tf.reduce_sum(logits), tf.reduce_min(logits), tf.reduce_max(logits)], message='logits = ')
 
-  return logits, mask, l1_loss
+  return logits, mask, reg_loss
 
 
 def build(x, labels, num_classes, is_training, reuse=False):

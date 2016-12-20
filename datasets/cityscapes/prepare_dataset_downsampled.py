@@ -12,8 +12,8 @@ from tqdm import trange
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('data_dir',
     '/home/kivan/datasets/Cityscapes/2048x1024/', 'Dataset dir')
-#tf.app.flags.DEFINE_integer('img_width', 640, '')
-#tf.app.flags.DEFINE_integer('img_height', 288, '')
+tf.app.flags.DEFINE_integer('img_width', 640, '')
+tf.app.flags.DEFINE_integer('img_height', 288, '')
 #tf.app.flags.DEFINE_integer('img_width', 320, '')
 #tf.app.flags.DEFINE_integer('img_height', 144, '')
 #tf.app.flags.DEFINE_integer('img_width', 1024, '')
@@ -26,9 +26,9 @@ tf.app.flags.DEFINE_integer('cy_end', 900, '')
 #tf.app.flags.DEFINE_integer('img_width', 640, '')
 #tf.app.flags.DEFINE_integer('cx_start', 120, '')
 #tf.app.flags.DEFINE_integer('img_height', 298, '')
-tf.app.flags.DEFINE_integer('img_width', 480, '')
-#tf.app.flags.DEFINE_integer('img_height', 208, '')
-tf.app.flags.DEFINE_integer('img_height', 224, '')
+#tf.app.flags.DEFINE_integer('img_width', 480, '')
+##tf.app.flags.DEFINE_integer('img_height', 208, '')
+#tf.app.flags.DEFINE_integer('img_height', 224, '')
 
 tf.app.flags.DEFINE_string('save_dir',
     '/home/kivan/datasets/Cityscapes/tensorflow/' +
@@ -68,7 +68,7 @@ def create_tfrecord(rgb, label_map, weight_map, depth_img,
       'rgb': _bytes_feature(rgb_str),
       'label_weights': _bytes_feature(weights_str),
       'labels': _bytes_feature(labels_str),
-      #'disparity': _bytes_feature(disp_raw)
+      'disparity': _bytes_feature(disp_raw)
       }))
   writer.write(example.SerializeToString())
   writer.close()

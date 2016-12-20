@@ -17,24 +17,99 @@ import eval_helper
 #import model2 as model
 import model_fcn as model
 
-DATA_DIR = '/home/kivan/datasets/MNIST/'
-SAVE_DIR = '/home/kivan/source/out/mnist/'
+#np.random.seed(100) 
+np.random.seed(int(time.time() * 1e6) % 2**31)
 
-img_height = 28
-img_width = 28
-num_channels = 1
+def unpickle(file):
+  fo = open(file, 'rb')
+  dict = pickle.load(fo, encoding='latin1')
+  fo.close()
+  return dict
+
+## MNIST
+#DATASET = 'MNIST'
+#DATA_DIR = '/home/kivan/datasets/MNIST/'
+#SAVE_DIR = '/home/kivan/source/out/mnist/'
+#img_height = 28
+#img_width = 28
+#num_channels = 1
+#num_classes = 10
+##batch_size = 50
+#batch_size = 100
+#num_epochs = 60
+##num_epochs_per_decay = 5
+##learning_rate = 1e-4
+##learning_rate = 1e-2
+##learning_rate = 1e-1
+#learning_rate = 1e-3
+#momentum = 0.9
+#num_epochs_per_decay = 8
+#lr_decay_factor = 0.5
+##dataset = input_data.read_data_sets(DATA_DIR, one_hot=True)
+#dataset = input_data.read_data_sets(DATA_DIR)
+#train_x = dataset.train.images
+#train_x = train_x.reshape([-1, 28, 28, 1])
+#train_y = dataset.train.labels
+#valid_x = dataset.validation.images
+#valid_x = valid_x.reshape([-1, 28, 28, 1])
+#valid_y = dataset.validation.labels
+#test_x = dataset.test.images
+#test_x = test_x.reshape([-1, 28, 28, 1])
+#test_y = dataset.test.labels
+#train_mean = train_x.mean()
+#train_x -= train_mean
+#valid_x -= train_mean
+#test_x -= train_mean
+
+
+# CIFAR
+DATASET = 'CIFAR'
+DATA_DIR = '/home/kivan/datasets/CIFAR-10/'
+SAVE_DIR = '/home/kivan/source/out/cifar10/'
+
+img_height = 32
+img_width = 32
+num_channels = 3
 num_classes = 10
 #batch_size = 50
 batch_size = 100
 num_epochs = 60
 #num_epochs_per_decay = 5
 #learning_rate = 1e-4
-#learning_rate = 1e-2
+learning_rate = 1e-2
 #learning_rate = 1e-1
-learning_rate = 1e-3
-momentum = 0.9
+#learning_rate = 1e-3
 num_epochs_per_decay = 8
 lr_decay_factor = 0.5
+
+train_x = np.ndarray((0, img_height * img_width * num_channels), dtype=np.float32)
+train_y = []
+for i in range(1, 6):
+  subset = unpickle(os.path.join(DATA_DIR, 'data_batch_%d' % i))
+  train_x = np.vstack((train_x, subset['data']))
+  train_y += subset['labels']
+train_x = train_x.reshape((-1, num_channels, img_height, img_width)).transpose(0,2,3,1)
+train_y = np.array(train_y, dtype=np.int32)
+
+subset = unpickle(os.path.join(DATA_DIR, 'test_batch'))
+test_x = subset['data'].reshape((-1, num_channels, img_height, img_width)).transpose(0,2,3,1).astype(np.float32)
+test_y = np.array(subset['labels'], dtype=np.int32)
+
+
+train_mean = train_x.mean((0,1,2))
+train_std = train_x.std((0,1,2))
+valid_x = test_x
+valid_y = test_y
+#train_x = (train_x - data_mean)
+#valid_x = (valid_x - data_mean)
+train_x = (train_x - train_mean) / train_std
+valid_x = (valid_x - train_mean) / train_std
+
+print(train_x.shape)
+print(valid_x.shape)
+print(test_x.shape)
+
+
 
 
 def check_grads(tf_vars, grads):
@@ -124,34 +199,21 @@ def draw_image(img, mean, std, step, path):
   img *= std
   img += mean
   #img = img.reshape(img.shape[:-1]).astype(np.uint8)
-  img = img.reshape(img.shape[:-1])
+  if DATASET == 'MNIST':
+    img = img.reshape(img.shape[:-1])
+  elif DATASET == 'CIFAR':
+    img = img.astype(np.uint8)
   #ski.io.imshow(img)
   #ski.io.show()
-  ski.io.imsave(path+'/'+str(step)+'_img.png', img)
+  ski.io.imsave(path+'/'+ '%05d'%step + '_img.png', img)
 
 def draw_mask(step, mask, save_dir):
   img = mask / mask.max()
   img = img.reshape(img.shape[:-1])
-  ski.io.imsave(save_dir + '/'+str(step)+'_mask.png', img)
+  ski.io.imsave(save_dir + '/'+ '%05d'%step +'_mask.png', img)
 
 
-#np.random.seed(100) 
-np.random.seed(int(time.time() * 1e6) % 2**31)
-#dataset = input_data.read_data_sets(DATA_DIR, one_hot=True)
-dataset = input_data.read_data_sets(DATA_DIR)
-train_x = dataset.train.images
-train_x = train_x.reshape([-1, 28, 28, 1])
-train_y = dataset.train.labels
-valid_x = dataset.validation.images
-valid_x = valid_x.reshape([-1, 28, 28, 1])
-valid_y = dataset.validation.labels
-test_x = dataset.test.images
-test_x = test_x.reshape([-1, 28, 28, 1])
-test_y = dataset.test.labels
-train_mean = train_x.mean()
-train_x -= train_mean
-valid_x -= train_mean
-test_x -= train_mean
+
 
 node_x = tf.placeholder(tf.float32, [None, img_height, img_width, num_channels])
 #node_y = tf.placeholder(tf.float32, [None, num_classes])
@@ -231,13 +293,13 @@ for epoch_num in range(1, num_epochs + 1):
     #print((mask_val < 0.1).sum())
     #print(mask_val)
     duration = time.time() - start_time
-    if (step+1) % 30 == 0:
+    if (step) % 30 == 0:
       #check_grads(grads, grad_vals)
-      draw_image(batch_x[0], train_mean, 1, step, SAVE_DIR)
+      draw_image(batch_x[0], train_mean, train_std, step, SAVE_DIR)
       draw_mask(step, mask_val[0], SAVE_DIR)
       sec_per_batch = float(duration)
       format_str = 'epoch %d, step %d / %d, loss = %.2f (%.3f sec/batch)'
-      print(format_str % (epoch_num, step+1, num_batches, loss_val, sec_per_batch))
+      print(format_str % (epoch_num, step, num_batches-1, loss_val, sec_per_batch))
     #if (step+1) % 500 == 0:
     #  draw_conv_filters(epoch_num, step, conv1_weights, SAVE_DIR)
 

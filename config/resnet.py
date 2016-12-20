@@ -5,7 +5,8 @@ import train_helper
 #MODEL_PATH = './models/resnet/resnet.py'
 #MODEL_PATH = './models/resnet/resnet_refine.py'
 #MODEL_PATH = './models/resnet/resnet_fullres.py'
-MODEL_PATH = './models/resnet/resnet_fullres_dilated.py'
+#MODEL_PATH = './models/resnet/resnet_fullres_dilated.py'
+MODEL_PATH = './models/resnet/resnet_dilated.py'
 #MODEL_PATH = './models/resnet/resnet_seg_depth.py'
 SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
                         train_helper.get_time_string())
@@ -16,6 +17,7 @@ SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
 
 #IMG_WIDTH = 480
 #IMG_HEIGHT = 224
+
 IMG_WIDTH = 640
 IMG_HEIGHT = 288
 #IMG_WIDTH = 1024
@@ -31,8 +33,8 @@ tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
 tf.app.flags.DEFINE_float('initial_learning_rate', 1e-4, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 4, '')
-#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
-tf.app.flags.DEFINE_integer('num_epochs_per_decay', 10, '')
+tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 10, '')
 tf.app.flags.DEFINE_integer('batch_size', 2, '')
 tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
 

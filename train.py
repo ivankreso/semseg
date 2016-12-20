@@ -61,13 +61,17 @@ def train(model, train_dataset, valid_dataset):
       opt = tf.train.RMSPropOptimizer(lr)
     else:
       raise ValueError()
-    grads = opt.compute_gradients(loss)
 
-    #TODO
-    #apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
-    #with tf.control_dependencies([apply_gradient_op]):
-      #train_op = tf.no_op(name='train')
+    #train_op = model.minimize(opt, loss, global_step)
+
+    grads = opt.compute_gradients(loss)
+    ##TODO
+    ##apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
+    ##with tf.control_dependencies([apply_gradient_op]):
+    #  #train_op = tf.no_op(name='train')
     train_op = opt.apply_gradients(grads, global_step=global_step)
+
+
 
     # Add histograms for trainable variables.
     #for var in tf.trainable_variables():
@@ -112,7 +116,11 @@ def train(model, train_dataset, valid_dataset):
 
     summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, graph=sess.graph)
 
-    variable_map = train_helper.get_variable_map()
+    init_vars = train_helper.get_variables(sess)
+    train_helper.print_variable_diff(sess, init_vars)
+    #variable_map = train_helper.get_variable_map()
+    num_params = train_helper.get_num_params()
+    print('Number of parameters = ', num_params)
     # take the train loss moving average
     #loss_avg_train = variable_map['total_loss/avg:0']
     train_data, valid_data = model.init_eval_data()
@@ -175,6 +183,7 @@ def train(model, train_dataset, valid_dataset):
           print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num,
                               step, model.num_examples(train_dataset), loss_val,
                               examples_per_sec, sec_per_batch))
+      train_helper.print_variable_diff(sess, init_vars)
       model.evaluate('valid', sess, epoch_num, valid_ops, valid_dataset, valid_data)
       model.print_results(valid_data)
       #model.plot_results(train_data, valid_data)

@@ -37,9 +37,9 @@ def _read_and_decode(filename_queue):
   #labels.set_shape([num_pixels])
 
   image = tf.reshape(image, shape=[FLAGS.img_height, FLAGS.img_width, FLAGS.img_depth])
+  depth = tf.reshape(depth, shape=[FLAGS.img_height, FLAGS.img_width, 1])
   num_pixels = FLAGS.img_height * FLAGS.img_width
   labels = tf.reshape(labels, shape=[num_pixels])
-  depth = tf.reshape(depth, shape=[num_pixels])
   weights = tf.reshape(weights, shape=[num_pixels])
 
   #image = tf.Print(image, [img_name, image[100,100,:]], message="P1: ")

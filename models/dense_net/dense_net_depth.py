@@ -13,7 +13,8 @@ from tensorflow.contrib.framework import arg_scope
 import losses
 import eval_helper
 #import datasets.reader_rgbd_depth as reader
-import datasets.reader as reader
+import datasets.reader_rgbd as reader
+#import datasets.reader as reader
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -46,8 +47,8 @@ def init_eval_data():
   valid_data['accuracy'] = []
   return train_data, valid_data
 
-def normalize_input(img):
-  return img - MEAN_BGR
+def normalize_input(img, depth):
+  return img - MEAN_BGR, depth - 33.0
   #"""Changes RGB [0,1] valued image to BGR [0,255] with mean subtracted."""
   #with tf.name_scope('input'), tf.device('/cpu:0'):
   #  #rgb -= MEAN_RGB
@@ -111,7 +112,7 @@ def upsample(net, name):
     net = tf.contrib.layers.convolution2d_transpose(net, num_filters, kernel_size=3, stride=2)
     return net
 
-def _build(image, is_training):
+def _build(image, depth, is_training):
   bn_params['is_training'] = is_training
   weight_decay = 1e-4
   #init_func = layers.variance_scaling_initializer(mode='FAN_OUT')
@@ -134,6 +135,8 @@ def _build(image, is_training):
       weights_initializer=init_func, biases_initializer=None,
       weights_regularizer=layers.l2_regularizer(weight_decay)):
     net = layers.convolution2d(image, 48, 3, scope='conv0')
+    #depth = tf.Print(depth, [tf.reduce_mean(depth)], message='depth = ')
+    net = tf.concat(3, [depth, net])
     block_outputs = []
     for i, size in enumerate(block_sizes):
       print(i, size)
@@ -171,13 +174,13 @@ def _build(image, is_training):
 def build(dataset, is_training, reuse=False):
   # Get images and labels.
   x, labels, weights, depth, img_names = reader.inputs(dataset, shuffle=is_training, num_epochs=FLAGS.max_epochs)
-  x = normalize_input(x)
+  x, depth = normalize_input(x, depth)
 
   if reuse:
     tf.get_variable_scope().reuse_variables()
 
   #logits = _build(x, is_training)
-  logits, logits_mid = _build(x, is_training)
+  logits, logits_mid = _build(x, depth, is_training)
   total_loss = loss(logits, logits_mid, labels, weights, is_training)
 
   #all_vars = tf.contrib.framework.get_variables()
@@ -192,7 +195,7 @@ def build(dataset, is_training, reuse=False):
 
 def loss(logits, logits_mid, labels, weights, is_training=True):
 #def loss(logits, labels, weights, is_training=True):
-  xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights)
+  xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=50)
   #xent_loss += losses.weighted_cross_entropy_loss(logits_mid, labels, weights)
   #xent_loss /= 2
 

@@ -16,6 +16,7 @@ import losses
 import datasets.reader as reader
 
 FLAGS = tf.app.flags.FLAGS
+HEAD_PREFIX = 'head'
 
 #from tensorpack import *
 #from tensorpack.utils import logger
@@ -32,7 +33,7 @@ MEAN_BGR = [75.08929598, 85.01498926, 75.2051479]
 
 def evaluate(name, sess, epoch_num, run_ops, dataset, data):
   loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation(
-      sess, epoch_num, run_ops, num_examples(dataset))
+      sess, epoch_num, run_ops, dataset.num_examples())
   if iou > data['best_iou'][0]:
     data['best_iou'] = [iou, epoch_num]
 
@@ -102,6 +103,32 @@ def upsample(net, name):
     num_filters = net.get_shape().as_list()[3]
     net = tf.contrib.layers.convolution2d_transpose(net, num_filters, kernel_size=3, stride=2)
     return net
+
+def pyramid_pooling(net, name):
+  with tf.variable_scope(name):
+    shape = net.get_shape().as_list()
+    print(shape)
+    height = shape[1]
+    width = shape[2]
+    dim = shape[3]
+    grid_size = [6, 3, 2, 1]
+    #grid_size = [3, 6, 9, 18]
+    pool_dim = int(round(dim / len(grid_size)))
+    print(pool_dim)
+    concat_lst = [net]
+    for s in grid_size:
+      kh = int(round(height / s))
+      kw = int(round(width / s))
+      print(kh, kw)
+      #pool = layers.avg_pool2d(net, kernel_size=[kh, kw], stride=[kh, kw], padding='SAME')
+      pool = layers.avg_pool2d(net, kernel_size=[kh, kh], stride=[kh, kh], padding='SAME')
+      #pool = layers.avg_pool2d(net, kernel_size=[kh, kh], stride=[kh, kh], padding='VALID')
+      print(pool)
+      pool = layers.convolution2d(pool, pool_dim, kernel_size=1, scope='conv_%dx%d'%(s,s))
+      pool = tf.image.resize_bilinear(pool, [height, width], name='resize_score')
+      concat_lst += [pool]
+      print(net)
+    return tf.concat(3, concat_lst)
 
 def _build(image, is_training):
   #def BatchNorm(x, use_local_stat=None, decay=0.9, epsilon=1e-5):
@@ -177,96 +204,53 @@ def _build(image, is_training):
   l = layers.max_pool2d(l, 3, stride=2, padding='SAME', scope='pool0')
   #l = layers.max_pool2d(l, 3, stride=1, padding='SAME', scope='pool0')
   l = layer(l, 'group0', 64, defs[0], 1, first=True)
-  print(l)
   skip_layers += [l]
   l = layer(l, 'group1', 128, defs[1], 2)
-  #skip_layers += [l]
-  #l = layer(l, 'group2', 256, defs[2], 2)
-  bsz = 2
-  print(l.get_shape())
-  #paddings, crops = tf.required_space_to_batch_paddings(l.get_shape(), [bsz, bsz])
-  paddings = [[0, 0], [0, 0]]
-  crops = [[0, 0], [0, 0]]
-  print(paddings, crops)
-  l = tf.space_to_batch(l, paddings=paddings, block_size=bsz)
-  l = layer(l, 'group2', 256, defs[2], 1)
-  l = tf.batch_to_space(l, crops=crops, block_size=bsz)
-  #skip_layers += [l]
-  bsz = 4
-  #paddings, crops = tf.required_space_to_batch_paddings(l.get_shape(), [bsz, bsz])
-  print(paddings, crops)
-  l = tf.space_to_batch(l, paddings=paddings, block_size=bsz)
-  l = layer(l, 'group3', 512, defs[3], 1)
-  l = tf.batch_to_space(l, crops=crops, block_size=bsz)
+  skip_layers += [l]
+
+  #bsz = 2
+  #print(l.get_shape())
+  ##paddings, crops = tf.required_space_to_batch_paddings(l.get_shape(), [bsz, bsz])
+  #paddings = [[0, 0], [0, 0]]
+  #crops = [[0, 0], [0, 0]]
+  #l = tf.space_to_batch(l, paddings=paddings, block_size=bsz)
+  #l = layer(l, 'group2', 256, defs[2], 1)
+  #l = tf.batch_to_space(l, crops=crops, block_size=bsz)
+
+  l = layer(l, 'group2', 256, defs[2], 2)
+  #bsz = 4
+  ##bsz = 2
+  #l = tf.space_to_batch(l, paddings=paddings, block_size=bsz)
+  #l = layer(l, 'group3', 512, defs[3], 1)
+  #l = tf.batch_to_space(l, crops=crops, block_size=bsz)
+  l = layer(l, 'group3', 512, defs[3], 2)
   print(l)
   #l = layer(l, 'group3', 512, defs[3], 1)
   l = tf.nn.relu(l)
-  #in_k = l.get_shape().as_list()[-2]
-  #print(l.get_shape().as_list())
-  #print(l)
-  #l = layers.avg_pool2d(l, kernel_size=in_k, scope='global_avg_pool')
-  #l = layers.flatten(l, scope='flatten')
-  #logits = layers.fully_connected(l, FLAGS.num_classes, activation_fn=None, scope='fc1000')
 
-  with arg_scope([layers.convolution2d],
-      stride=1, padding='SAME', activation_fn=tf.nn.relu,
-      normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
-      weights_initializer=init_func,
-      weights_regularizer=layers.l2_regularizer(weight_decay)):
-      l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv1') # faster
+  with tf.variable_scope('head'):
+    with arg_scope([layers.convolution2d],
+        stride=1, padding='SAME', activation_fn=tf.nn.relu,
+        normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
+        weights_initializer=init_func,
+        weights_regularizer=layers.l2_regularizer(weight_decay)):
+      #l = pyramid_pooling(l, 'pyramid_pooling')
+      #l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv1') # faster
+      l = layers.convolution2d(l, 512, kernel_size=3, scope='conv1') # faster
       #l = layers.convolution2d(l, 512, kernel_size=5, rate=2, scope='conv2')
-      l = layers.convolution2d(l, 512, kernel_size=5, rate=8, scope='conv2')
-      l = layers.convolution2d(l, 512, kernel_size=3, scope='conv3')
+      #l = layers.convolution2d(l, 512, kernel_size=5, rate=8, scope='conv2')
+      #l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv2')
+      #l = layers.convolution2d(l, 1024, kernel_size=1, activation_fn=None, scope='conv2')
       #skip_layers += [l]
 
-  with arg_scope([layers.convolution2d, layers.convolution2d_transpose],
-      stride=1, padding='SAME', activation_fn=None,
-      normalizer_fn=None, normalizer_params=None,
-      weights_initializer=init_func, biases_initializer=None,
-      weights_regularizer=layers.l2_regularizer(weight_decay)):
-    net = l
-    #block_sizes = [3,4,5]
-    block_sizes = [5,6]
-    r = 16
-    for i, size in reversed(list(enumerate(block_sizes))):
-      print(i, size)
-      net = upsample(net, 'group'+str(i)+'_back_upsample')
-      net = tf.concat(3, [skip_layers[i], net])
-      print(net)
-      net = dense_block(net, size, r, 'group'+str(i)+'_back', is_training)
-      print(net)
-    logits = layers.convolution2d(net, FLAGS.num_classes, 1,
-        biases_initializer=tf.zeros_initializer, scope='logits')
-
-  #logits = layers.convolution2d(l, FLAGS.num_classes, 1, padding='SAME',
-  #    activation_fn=None, weights_initializer=init_func,
-  #    weights_regularizer=None, scope='logits')
-
-  logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
-                                    name='resize_score')
+      logits = layers.convolution2d(l, FLAGS.num_classes, 1, padding='SAME',
+          activation_fn=None, weights_initializer=init_func, normalizer_fn=None,
+          scope='logits')
+          #weights_regularizer=None, scope='logits')
+    logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
+                                      name='resize_logits')
   return logits
   
-
-  #with argscope(Conv2D, nl=tf.identity, use_bias=False,
-  #              W_init=variance_scaling_initializer(mode='FAN_OUT')):
-  #  # tensorflow with padding=SAME will by default pad [2,3] here.
-  #  # but caffe conv with stride will pad [3,3]
-  #  image = tf.pad(image, [[0,0],[3,3],[3,3],[0,0]])
-
-  #  fc1000 = (LinearWrap(image)
-  #      .Conv2D('conv0', 64, 7, stride=2, nl=BNReLU, padding='VALID')
-  #      .MaxPooling('pool0', shape=3, stride=2, padding='SAME')
-  #      .apply(layer, 'group0', 64, defs[0], 1, first=True)
-  #      .apply(layer, 'group1', 128, defs[1], 2)
-  #      .apply(layer, 'group2', 256, defs[2], 2)
-  #      .apply(layer, 'group3', 512, defs[3], 2)())
-  #      #.tf.nn.relu()
-  #      #.GlobalAvgPooling('gap')
-  #      #.FullyConnected('fc1000', 1000, nl=tf.identity)())
-  ##prob = tf.nn.softmax(fc1000, name='prob')
-  ##nr_wrong = prediction_incorrect(fc1000, label, name='wrong-top1')
-  ##nr_wrong = prediction_incorrect(fc1000, label, 5, name='wrong-top5')
-
 
 def name_conversion(caffe_layer_name, prefix=''):
   """ Convert a caffe parameter name to a tensorflow parameter name as
@@ -312,7 +296,8 @@ def name_conversion(caffe_layer_name, prefix=''):
   #print(layer_type)
   #if layer_type != 'bn':
   if layer_type == 'res':
-    layer_type = TYPE_DICT[layer_type] + (str(layer_id) if layer_branch == 2 else 'shortcut')
+    layer_type = TYPE_DICT[layer_type] + (str(layer_id)
+        if layer_branch == 2 else 'shortcut')
   elif layer_branch == 2:
     layer_type = 'conv' + str(layer_id) + '/' + TYPE_DICT[layer_type]
   elif layer_branch == 1:
@@ -347,7 +332,7 @@ def create_init_op(params):
 def build(dataset, is_training, reuse=False):
   # Get images and labels.
   image, labels, weights, num_labels, img_names = reader.inputs(
-      dataset, shuffle=is_training, num_epochs=FLAGS.max_epochs)
+      dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
   image = normalize_input(image)
 
   if reuse:
@@ -378,11 +363,54 @@ def build(dataset, is_training, reuse=False):
   else:
     return [total_loss, logits, labels, img_names]
 
+def minimize(opt, loss, global_step):
+  #resnet_vars = tf.trainable_variables()
+  all_vars = tf.trainable_variables()
+  resnet_vars = []
+  head_vars = []
+  for v in all_vars:
+    if v.name[:4] == 'head':
+      print(v.name)
+      head_vars += [v]
+    else:
+      resnet_vars += [v]
+  grads_and_vars = opt.compute_gradients(loss, resnet_vars + head_vars)
+  resnet_gv = grads_and_vars[:len(resnet_vars)]
+  head_gv = grads_and_vars[len(resnet_vars):]
+  #lr_mul = 10
+  lr_mul = 1
+  print(head_gv[0])
+  #head_gv = [[g*lr_mul, v] for g,v in head_gv]
+  print(head_gv[0])
+  #  ygrad, _ = grads_and_vars[1]
+  train_op = opt.apply_gradients(resnet_gv + head_gv, global_step=global_step)
+  return train_op
+
+  #my_vars = [the rest of variables]
+  #opt1 = tf.train.GradientDescentOptimizer(0.00001)
+  #opt2 = tf.train.GradientDescentOptimizer(0.0001)
+  #grads = tf.gradients(loss, var_list1 + var_list2)
+  #grads1 = grads[:len(var_list1)]
+  #grads2 = grads[len(var_list1):]
+  #tran_op1 = opt1.apply_gradients(zip(grads1, var_list1))
+  #train_op2 = opt2.apply_gradients(zip(grads2, var_list2))
+  #train_op = tf.group(train_op1, train_op2)
+  #x = tf.Variable(tf.ones([]))
+  #y = tf.Variable(tf.zeros([]))
+  #loss = tf.square(x-y)
+  #global_step = tf.Variable(0, name="global_step", trainable=False)
+
+  #  opt = tf.GradientDescentOptimizer(learning_rate=0.1)
+  #  grads_and_vars = opt.compute_gradients(loss, [x, y])
+  #  ygrad, _ = grads_and_vars[1]
+  #  train_op = opt.apply_gradients([grads_and_vars[0], (ygrad*2, y)], global_step=global_step)
 
 def loss(logits, labels, weights, num_labels, is_training=True):
   # TODO
   #loss_tf = tf.contrib.losses.softmax_cross_entropy()
-  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights)
+  #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights)
+  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=10)
+  #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=1)
   #loss_val = losses.weighted_hinge_loss(logits, labels, weights, num_labels)
   #loss_val = losses.flip_xent_loss(logits, labels, weights, num_labels)
   #loss_val = losses.flip_xent_loss_symmetric(logits, labels, weights, num_labels)
