@@ -62,14 +62,10 @@ def train(model, train_dataset, valid_dataset):
     else:
       raise ValueError()
 
-    #train_op = model.minimize(opt, loss, global_step)
+    train_op = model.minimize(opt, loss, global_step)
 
-    grads = opt.compute_gradients(loss)
-    ##TODO
-    ##apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
-    ##with tf.control_dependencies([apply_gradient_op]):
-    #  #train_op = tf.no_op(name='train')
-    train_op = opt.apply_gradients(grads, global_step=global_step)
+    #grads = opt.compute_gradients(loss)
+    #train_op = opt.apply_gradients(grads, global_step=global_step)
 
 
 

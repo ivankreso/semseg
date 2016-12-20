@@ -130,6 +130,9 @@ def pyramid_pooling(net, name):
       print(net)
     return tf.concat(3, concat_lst)
 
+PADDINGS = [[0, 0], [0, 0]]
+CROPS = [[0, 0], [0, 0]]
+
 def _build(image, is_training):
   #def BatchNorm(x, use_local_stat=None, decay=0.9, epsilon=1e-5):
   weight_decay = 1e-4
@@ -159,7 +162,7 @@ def _build(image, is_training):
     else:
       return l
 
-  def bottleneck(l, ch_out, stride, preact):
+  def bottleneck(l, ch_out, stride, preact, rate=1):
     ch_in = l.get_shape().as_list()[-1]
     if preact == 'both_preact':
       l = tf.nn.relu(l, name='preact-relu')
@@ -172,17 +175,27 @@ def _build(image, is_training):
       weights_regularizer=layers.l2_regularizer(weight_decay)):
 
       l = layers.convolution2d(l, ch_out, kernel_size=1, stride=stride, scope='conv1')
+
+      if rate > 1:
+        l = tf.space_to_batch(l, paddings=PADDINGS, block_size=rate)
       l = layers.convolution2d(l, ch_out, kernel_size=3, scope='conv2')
       l = layers.convolution2d(l, ch_out * 4, kernel_size=1, activation_fn=None, scope='conv3')
+      if rate > 1:
+        l = tf.batch_to_space(l, crops=CROPS, block_size=rate)
       return l + shortcut(bottom_in, ch_in, ch_out * 4, stride)
 
-  def layer(l, layername, features, count, stride, first=False):
+  def layer(l, layername, features, count, stride, rate=1, first=False):
     with tf.variable_scope(layername):
       with tf.variable_scope('block0'):
-        l = bottleneck(l, features, stride, 'no_preact' if first else 'both_preact')
+        l = bottleneck(l, features, stride, 'no_preact' if first else 'both_preact', rate)
+      if rate > 1:
+        l = tf.space_to_batch(l, paddings=PADDINGS, block_size=rate)
       for i in range(1, count):
         with tf.variable_scope('block{}'.format(i)):
           l = bottleneck(l, features, 1, 'both_preact')
+      if rate > 1:
+        assert stride == 1
+        l = tf.batch_to_space(l, crops=CROPS, block_size=rate)
       return l
 
   cfg = {
@@ -211,19 +224,19 @@ def _build(image, is_training):
   #bsz = 2
   #print(l.get_shape())
   ##paddings, crops = tf.required_space_to_batch_paddings(l.get_shape(), [bsz, bsz])
-  #paddings = [[0, 0], [0, 0]]
-  #crops = [[0, 0], [0, 0]]
   #l = tf.space_to_batch(l, paddings=paddings, block_size=bsz)
   #l = layer(l, 'group2', 256, defs[2], 1)
   #l = tf.batch_to_space(l, crops=crops, block_size=bsz)
 
-  l = layer(l, 'group2', 256, defs[2], 2)
+  #l = layer(l, 'group2', 256, defs[2], 2)
+  l = layer(l, 'group2', 256, defs[2], 1, rate=2)
   #bsz = 4
   ##bsz = 2
   #l = tf.space_to_batch(l, paddings=paddings, block_size=bsz)
   #l = layer(l, 'group3', 512, defs[3], 1)
   #l = tf.batch_to_space(l, crops=crops, block_size=bsz)
-  l = layer(l, 'group3', 512, defs[3], 2)
+  #l = layer(l, 'group3', 512, defs[3], 1, rate=2)
+  l = layer(l, 'group3', 512, defs[3], 1, rate=4)
   print(l)
   #l = layer(l, 'group3', 512, defs[3], 1)
   l = tf.nn.relu(l)
@@ -377,8 +390,8 @@ def minimize(opt, loss, global_step):
   grads_and_vars = opt.compute_gradients(loss, resnet_vars + head_vars)
   resnet_gv = grads_and_vars[:len(resnet_vars)]
   head_gv = grads_and_vars[len(resnet_vars):]
-  #lr_mul = 10
-  lr_mul = 1
+  lr_mul = 10
+  #lr_mul = 1
   print(head_gv[0])
   #head_gv = [[g*lr_mul, v] for g,v in head_gv]
   print(head_gv[0])
