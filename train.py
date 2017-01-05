@@ -113,7 +113,7 @@ def train(model, train_dataset, valid_dataset):
     summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, graph=sess.graph)
 
     init_vars = train_helper.get_variables(sess)
-    train_helper.print_variable_diff(sess, init_vars)
+    #train_helper.print_variable_diff(sess, init_vars)
     #variable_map = train_helper.get_variable_map()
     num_params = train_helper.get_num_params()
     print('Number of parameters = ', num_params)
@@ -179,7 +179,7 @@ def train(model, train_dataset, valid_dataset):
           print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num,
                               step, model.num_examples(train_dataset), loss_val,
                               examples_per_sec, sec_per_batch))
-      train_helper.print_variable_diff(sess, init_vars)
+      #train_helper.print_variable_diff(sess, init_vars)
       model.evaluate('valid', sess, epoch_num, valid_ops, valid_dataset, valid_data)
       model.print_results(valid_data)
       #model.plot_results(train_data, valid_data)

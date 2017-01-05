@@ -120,9 +120,9 @@ def pyramid_pooling(net, name):
       kh = int(round(height / s))
       kw = int(round(width / s))
       print(kh, kw)
-      #pool = layers.avg_pool2d(net, kernel_size=[kh, kw], stride=[kh, kw], padding='SAME')
       #pool = layers.avg_pool2d(net, kernel_size=[kh, kh], stride=[kh, kh], padding='SAME')
-      pool = layers.avg_pool2d(net, kernel_size=[kh, kh], stride=[kh, kh], padding='VALID')
+      #pool = layers.avg_pool2d(net, kernel_size=[kh, kh], stride=[kh, kh], padding='VALID')
+      pool = layers.avg_pool2d(net, kernel_size=[kh, kw], stride=[kh, kw], padding='VALID')
       print(pool)
       pool = layers.convolution2d(pool, pool_dim, kernel_size=1, scope='conv_%dx%d'%(s,s))
       pool = tf.image.resize_bilinear(pool, [height, width], name='resize_score')
@@ -132,6 +132,174 @@ def pyramid_pooling(net, name):
 
 PADDINGS = [[0, 0], [0, 0]]
 CROPS = [[0, 0], [0, 0]]
+
+
+def build_2(image, is_training):
+  #def BatchNorm(x, use_local_stat=None, decay=0.9, epsilon=1e-5):
+  weight_decay = 1e-4
+  global bn_params
+  bn_params = {
+    # Decay for the moving averages.
+    #'decay': 0.999,
+    'decay': 0.9,
+    'center': True,
+    'scale': True,
+    # epsilon to prevent 0s in variance.
+    #'epsilon': 0.001,
+    'epsilon': 1e-5,
+    # None to force the updates
+    'updates_collections': None,
+    'is_training': is_training,
+  }
+  #init_func = layers.variance_scaling_initializer(mode='FAN_OUT')
+  init_func = layers.variance_scaling_initializer()
+
+  def shortcut(l, n_in, n_out, stride):
+    if n_in != n_out:
+      return layers.convolution2d(l, n_out, kernel_size=1, stride=stride,
+                                  activation_fn=None, scope='convshortcut')
+      #l = Conv2D('convshortcut', l, n_out, 1, stride=stride)
+      #return BatchNorm('bnshortcut', l)
+    else:
+      return l
+
+  def bottleneck(l, ch_out, stride, preact, rate=1):
+    ch_in = l.get_shape().as_list()[-1]
+    if preact == 'both_preact':
+      l = tf.nn.relu(l, name='preact-relu')
+    bottom_in = l
+    with arg_scope([layers.convolution2d],
+      stride=1, padding='SAME', activation_fn=tf.nn.relu,
+      normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
+      weights_initializer=init_func,
+      #weights_initializer=layers.variance_scaling_initializer(),
+      weights_regularizer=layers.l2_regularizer(weight_decay)):
+
+      l = layers.convolution2d(l, ch_out, kernel_size=1, stride=stride, scope='conv1')
+
+      if rate > 1:
+        l = tf.space_to_batch(l, paddings=PADDINGS, block_size=rate)
+      l = layers.convolution2d(l, ch_out, kernel_size=3, scope='conv2')
+      l = layers.convolution2d(l, ch_out * 4, kernel_size=1, activation_fn=None, scope='conv3')
+      if rate > 1:
+        l = tf.batch_to_space(l, crops=CROPS, block_size=rate)
+      return l + shortcut(bottom_in, ch_in, ch_out * 4, stride)
+
+  def layer(l, layername, features, count, stride, rate=1, first=False):
+    with tf.variable_scope(layername):
+      with tf.variable_scope('block0'):
+        l = bottleneck(l, features, stride, 'no_preact' if first else 'both_preact', rate)
+      if rate > 1:
+        l = tf.space_to_batch(l, paddings=PADDINGS, block_size=rate)
+      for i in range(1, count):
+        with tf.variable_scope('block{}'.format(i)):
+          l = bottleneck(l, features, 1, 'both_preact')
+      if rate > 1:
+        assert stride == 1
+        l = tf.batch_to_space(l, crops=CROPS, block_size=rate)
+      return l
+
+  cfg = {
+      50: ([3,4,6,3]),
+      101: ([3,4,23,3]),
+      152: ([3,8,36,3])
+  }
+  defs = cfg[MODEL_DEPTH]
+  
+  skip_layers = []
+  #image = tf.pad(image, [[0,0],[3,3],[3,3],[0,0]])
+  #l = layers.convolution2d(image, 64, 7, stride=2, padding='SAME',
+  #l = layers.convolution2d(image, 64, 7, stride=2, padding='VALID',
+  l = layers.convolution2d(image, 64, 7, stride=2, padding='SAME',
+      activation_fn=tf.nn.relu, weights_initializer=init_func,
+      normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
+      weights_regularizer=layers.l2_regularizer(weight_decay), scope='conv0')
+  skip_layers += [l]
+  l = layers.max_pool2d(l, 3, stride=2, padding='SAME', scope='pool0')
+  #l = layers.max_pool2d(l, 3, stride=1, padding='SAME', scope='pool0')
+  l = layer(l, 'group0', 64, defs[0], 1, first=True)
+  l = layer(l, 'group1', 128, defs[1], 2)
+
+  bsz = 2
+
+  #print(l.get_shape())
+  ##paddings, crops = tf.required_space_to_batch_paddings(l.get_shape(), [bsz, bsz])
+  #l = tf.space_to_batch(l, paddings=PADDINGS, block_size=bsz)
+  #l = layer(l, 'group2', 256, defs[2], 1)
+  #l = tf.batch_to_space(l, crops=CROPS, block_size=bsz)
+  #l = layer(l, 'group2', 256, defs[2], 2)
+  net = [layer(l, 'group2', 256, defs[2], 1)]
+  #l = layer(l, 'group3', 512, defs[3], 1)
+  with tf.variable_scope('', reuse=True):
+    #lp = layer(lp, 'group3', 512, defs[3], 2)
+    net += [layer(l, 'group2', 256, defs[2], 2)]
+
+  #bsz = 4
+  #bsz = 2
+
+  #lp = layers.max_pool2d(l, 2, stride=2, padding='SAME')
+  #print(lp)
+  #l = tf.space_to_batch(l, paddings=PADDINGS, block_size=bsz)
+  lp = l
+  net3 = []
+  for i, l in enumerate(net):
+    if i == 0:
+      net3 += [layer(l, 'group3', 512, defs[3], 1)]
+    else:
+      with tf.variable_scope('', reuse=True):
+        net3 += [layer(l, 'group3', 512, defs[3], 1)]
+  with tf.variable_scope('', reuse=True):
+    net3 += [layer(net[-1], 'group3', 512, defs[3], 2)]
+    net3 += [layer(net[-1], 'group3', 512, defs[3], 4)]
+    net3 += [layer(net[-1], 'group3', 512, defs[3], 8)]
+  print(net3)
+  #l = tf.batch_to_space(l, crops=CROPS, block_size=bsz)
+  #l = layer(l, 'group3', 512, defs[3], 1, rate=2)
+  #print(l, lp)
+  #l = layer(l, 'group3', 512, defs[3], 1)
+
+  #l = layer(l, 'group2', 256, defs[2], 1, rate=2)
+  #l = layer(l, 'group3', 512, defs[3], 1, rate=4)
+
+  with tf.variable_scope('head'):
+    with arg_scope([layers.convolution2d],
+        stride=1, padding='SAME', activation_fn=tf.nn.relu,
+        normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
+        weights_initializer=init_func,
+        weights_regularizer=layers.l2_regularizer(weight_decay)):
+
+      _, up_h, up_w, _ = net3[0].get_shape().as_list()
+      for i, l in enumerate(net3):
+        #net = layers.convolution2d(tf.nn.relu(l), 1024, kernel_size=1, scope='conv_proj1')
+        #l = layers.convolution2d(tf.nn.relu(l), 512, kernel_size=1,
+        l = layers.convolution2d(tf.nn.relu(l), 1024, kernel_size=1,
+            scope='conv_proj_'+str(i))
+        if i > 0:
+          l = tf.image.resize_bilinear(l, [up_h, up_w], name='resize_code_'+str(i))
+        net3[i] = l
+        #lp = layers.convolution2d(tf.nn.relu(lp), 1024, kernel_size=1, scope='conv_proj2')
+      #l = tf.concat(3, [l, lp])
+      print(net3)
+      l = tf.concat(3, net3)
+      print(l)
+      #l = tf.nn.relu(l)
+      #l = pyramid_pooling(l, 'pyramid_pooling')
+      #l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv1') # faster
+      l = layers.convolution2d(l, 512, kernel_size=3, scope='conv1') # faster
+      #l = layers.convolution2d(l, 512, kernel_size=5, rate=2, scope='conv2')
+      #l = layers.convolution2d(l, 512, kernel_size=5, rate=8, scope='conv2')
+      #l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv2')
+      #l = layers.convolution2d(l, 1024, kernel_size=1, activation_fn=None, scope='conv2')
+      #skip_layers += [l]
+
+      logits = layers.convolution2d(l, FLAGS.num_classes, 1, padding='SAME',
+          activation_fn=None, weights_initializer=init_func, normalizer_fn=None,
+          scope='logits')
+          #weights_regularizer=None, scope='logits')
+    logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
+                                      name='resize_logits')
+  return logits
+
 
 def _build(image, is_training):
   #def BatchNorm(x, use_local_stat=None, decay=0.9, epsilon=1e-5):
@@ -217,30 +385,32 @@ def _build(image, is_training):
   l = layers.max_pool2d(l, 3, stride=2, padding='SAME', scope='pool0')
   #l = layers.max_pool2d(l, 3, stride=1, padding='SAME', scope='pool0')
   l = layer(l, 'group0', 64, defs[0], 1, first=True)
-  skip_layers += [l]
   l = layer(l, 'group1', 128, defs[1], 2)
-  skip_layers += [l]
 
   bsz = 2
   #print(l.get_shape())
   ##paddings, crops = tf.required_space_to_batch_paddings(l.get_shape(), [bsz, bsz])
-  l = tf.space_to_batch(l, paddings=PADDINGS, block_size=bsz)
-  l = layer(l, 'group2', 256, defs[2], 1)
-  l = tf.batch_to_space(l, crops=CROPS, block_size=bsz)
+  #l = tf.space_to_batch(l, paddings=PADDINGS, block_size=bsz)
+  #l = layer(l, 'group2', 256, defs[2], 1)
+  #l = tf.batch_to_space(l, crops=CROPS, block_size=bsz)
+  l = layer(l, 'group2', 256, defs[2], 2)
+  #bsz = 4
+  bsz = 2
 
-  #l = layer(l, 'group2', 256, defs[2], 2)
-  bsz = 4
-  ##bsz = 2
+  #lp = layers.max_pool2d(l, 2, stride=2, padding='SAME')
+  #print(lp)
   l = tf.space_to_batch(l, paddings=PADDINGS, block_size=bsz)
   l = layer(l, 'group3', 512, defs[3], 1)
+  #with tf.variable_scope('', reuse=True):
+  #  lp = layer(lp, 'group3', 512, defs[3], 2)
   l = tf.batch_to_space(l, crops=CROPS, block_size=bsz)
   #l = layer(l, 'group3', 512, defs[3], 1, rate=2)
-  print(l)
+  l = tf.nn.relu(l)
+  #print(l, lp)
   #l = layer(l, 'group3', 512, defs[3], 1)
 
   #l = layer(l, 'group2', 256, defs[2], 1, rate=2)
   #l = layer(l, 'group3', 512, defs[3], 1, rate=4)
-  l = tf.nn.relu(l)
 
   with tf.variable_scope('head'):
     with arg_scope([layers.convolution2d],
@@ -248,7 +418,160 @@ def _build(image, is_training):
         normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
         weights_initializer=init_func,
         weights_regularizer=layers.l2_regularizer(weight_decay)):
+
+      logits_2 = layers.convolution2d(l, FLAGS.num_classes, 1, padding='SAME',
+          activation_fn=None, weights_initializer=init_func, normalizer_fn=None,
+          scope='logits_2')
+
+      l = layers.convolution2d(tf.nn.relu(l), 1024, kernel_size=1, scope='conv_proj1')
+      #lp = layers.convolution2d(tf.nn.relu(lp), 1024, kernel_size=1, scope='conv_proj2')
+      #_, up_h, up_w, _ = l.get_shape().as_list()
+      #lp = tf.image.resize_bilinear(lp, [up_h, up_w], name='resize_score')
+      #l = tf.concat(3, [l, lp])
       l = pyramid_pooling(l, 'pyramid_pooling')
+      #l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv1') # faster
+      l = layers.convolution2d(l, 512, kernel_size=3, scope='conv1') # faster
+      #l = layers.convolution2d(l, 512, kernel_size=5, rate=2, scope='conv2')
+      #l = layers.convolution2d(l, 512, kernel_size=5, rate=8, scope='conv2')
+      #l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv2')
+      #l = layers.convolution2d(l, 1024, kernel_size=1, activation_fn=None, scope='conv2')
+      #skip_layers += [l]
+
+      logits = layers.convolution2d(l, FLAGS.num_classes, 1, padding='SAME',
+          activation_fn=None, weights_initializer=init_func, normalizer_fn=None,
+          scope='logits')
+          #weights_regularizer=None, scope='logits')
+    logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
+                                      name='resize_logits')
+    logits_2 = tf.image.resize_bilinear(logits_2, [FLAGS.img_height, FLAGS.img_width],
+                                      name='resize_logits_2')
+  return logits, logits_2
+
+def _build_3(image, is_training):
+  #def BatchNorm(x, use_local_stat=None, decay=0.9, epsilon=1e-5):
+  weight_decay = 1e-4
+  global bn_params
+  bn_params = {
+    # Decay for the moving averages.
+    #'decay': 0.999,
+    'decay': 0.9,
+    'center': True,
+    'scale': True,
+    # epsilon to prevent 0s in variance.
+    #'epsilon': 0.001,
+    'epsilon': 1e-5,
+    # None to force the updates
+    'updates_collections': None,
+    'is_training': is_training,
+  }
+  #init_func = layers.variance_scaling_initializer(mode='FAN_OUT')
+  init_func = layers.variance_scaling_initializer()
+
+  def shortcut(l, n_in, n_out, stride):
+    if n_in != n_out:
+      return layers.convolution2d(l, n_out, kernel_size=1, stride=stride,
+                                  activation_fn=None, scope='convshortcut')
+      #l = Conv2D('convshortcut', l, n_out, 1, stride=stride)
+      #return BatchNorm('bnshortcut', l)
+    else:
+      return l
+
+  def bottleneck(l, ch_out, stride, preact, rate=1):
+    ch_in = l.get_shape().as_list()[-1]
+    if preact == 'both_preact':
+      l = tf.nn.relu(l, name='preact-relu')
+    bottom_in = l
+    with arg_scope([layers.convolution2d],
+      stride=1, padding='SAME', activation_fn=tf.nn.relu,
+      normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
+      weights_initializer=init_func,
+      #weights_initializer=layers.variance_scaling_initializer(),
+      weights_regularizer=layers.l2_regularizer(weight_decay)):
+
+      l = layers.convolution2d(l, ch_out, kernel_size=1, stride=stride, scope='conv1')
+
+      if rate > 1:
+        l = tf.space_to_batch(l, paddings=PADDINGS, block_size=rate)
+      l = layers.convolution2d(l, ch_out, kernel_size=3, scope='conv2')
+      l = layers.convolution2d(l, ch_out * 4, kernel_size=1, activation_fn=None, scope='conv3')
+      if rate > 1:
+        l = tf.batch_to_space(l, crops=CROPS, block_size=rate)
+      return l + shortcut(bottom_in, ch_in, ch_out * 4, stride)
+
+  def layer(l, layername, features, count, stride, rate=1, first=False):
+    with tf.variable_scope(layername):
+      with tf.variable_scope('block0'):
+        l = bottleneck(l, features, stride, 'no_preact' if first else 'both_preact', rate)
+      if rate > 1:
+        l = tf.space_to_batch(l, paddings=PADDINGS, block_size=rate)
+      for i in range(1, count):
+        with tf.variable_scope('block{}'.format(i)):
+          l = bottleneck(l, features, 1, 'both_preact')
+      if rate > 1:
+        assert stride == 1
+        l = tf.batch_to_space(l, crops=CROPS, block_size=rate)
+      return l
+
+  cfg = {
+      50: ([3,4,6,3]),
+      101: ([3,4,23,3]),
+      152: ([3,8,36,3])
+  }
+  defs = cfg[MODEL_DEPTH]
+  
+  skip_layers = []
+  #image = tf.pad(image, [[0,0],[3,3],[3,3],[0,0]])
+  #l = layers.convolution2d(image, 64, 7, stride=2, padding='SAME',
+  #l = layers.convolution2d(image, 64, 7, stride=2, padding='VALID',
+  l = layers.convolution2d(image, 64, 7, stride=2, padding='SAME',
+      activation_fn=tf.nn.relu, weights_initializer=init_func,
+      normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
+      weights_regularizer=layers.l2_regularizer(weight_decay), scope='conv0')
+  skip_layers += [l]
+  l = layers.max_pool2d(l, 3, stride=2, padding='SAME', scope='pool0')
+  #l = layers.max_pool2d(l, 3, stride=1, padding='SAME', scope='pool0')
+  l = layer(l, 'group0', 64, defs[0], 1, first=True)
+  l = layer(l, 'group1', 128, defs[1], 2)
+
+  bsz = 2
+
+  #print(l.get_shape())
+  ##paddings, crops = tf.required_space_to_batch_paddings(l.get_shape(), [bsz, bsz])
+  #l = tf.space_to_batch(l, paddings=PADDINGS, block_size=bsz)
+  #l = layer(l, 'group2', 256, defs[2], 1)
+  #l = tf.batch_to_space(l, crops=CROPS, block_size=bsz)
+  l = layer(l, 'group2', 256, defs[2], 2)
+  #bsz = 4
+  #bsz = 2
+
+  #lp = layers.max_pool2d(l, 2, stride=2, padding='SAME')
+  #print(lp)
+  l = tf.space_to_batch(l, paddings=PADDINGS, block_size=bsz)
+  l = layer(l, 'group3', 512, defs[3], 1)
+  #with tf.variable_scope('', reuse=True):
+  #  lp = layer(lp, 'group3', 512, defs[3], 2)
+  l = tf.batch_to_space(l, crops=CROPS, block_size=bsz)
+  #l = layer(l, 'group3', 512, defs[3], 1, rate=2)
+  l = tf.nn.relu(l)
+  #print(l, lp)
+  #l = layer(l, 'group3', 512, defs[3], 1)
+
+  #l = layer(l, 'group2', 256, defs[2], 1, rate=2)
+  #l = layer(l, 'group3', 512, defs[3], 1, rate=4)
+
+  with tf.variable_scope('head'):
+    with arg_scope([layers.convolution2d],
+        stride=1, padding='SAME', activation_fn=tf.nn.relu,
+        normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
+        weights_initializer=init_func,
+        weights_regularizer=layers.l2_regularizer(weight_decay)):
+
+      l = layers.convolution2d(tf.nn.relu(l), 1024, kernel_size=1, scope='conv_proj1')
+      #lp = layers.convolution2d(tf.nn.relu(lp), 1024, kernel_size=1, scope='conv_proj2')
+      #_, up_h, up_w, _ = l.get_shape().as_list()
+      #lp = tf.image.resize_bilinear(lp, [up_h, up_w], name='resize_score')
+      #l = tf.concat(3, [l, lp])
+      #l = pyramid_pooling(l, 'pyramid_pooling')
       #l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv1') # faster
       l = layers.convolution2d(l, 512, kernel_size=3, scope='conv1') # faster
       #l = layers.convolution2d(l, 512, kernel_size=5, rate=2, scope='conv2')
@@ -365,8 +688,10 @@ def build(dataset, is_training, reuse=False):
       resnet_param[newname] = v
       #print(v.shape)
 
-  logits = _build(image, is_training)
-  total_loss = loss(logits, labels, weights, num_labels, is_training)
+  #logits = _build(image, is_training)
+  #total_loss = loss(logits, labels, weights, num_labels, is_training)
+  logits, logits2 = _build(image, is_training)
+  total_loss = loss(logits, logits2, labels, weights, num_labels, is_training)
 
   #all_vars = tf.contrib.framework.get_variables()
   #for v in all_vars:
@@ -419,11 +744,14 @@ def minimize(opt, loss, global_step):
   #  ygrad, _ = grads_and_vars[1]
   #  train_op = opt.apply_gradients([grads_and_vars[0], (ygrad*2, y)], global_step=global_step)
 
-def loss(logits, labels, weights, num_labels, is_training=True):
+def loss(logits, logits2, labels, weights, num_labels, is_training=True):
   # TODO
   #loss_tf = tf.contrib.losses.softmax_cross_entropy()
   #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights)
   loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=10)
+  #w = 0.4
+  #loss_val += w * losses.weighted_cross_entropy_loss(logits2, labels, weights, max_weight=10)
+  
   #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=1)
   #loss_val = losses.weighted_hinge_loss(logits, labels, weights, num_labels)
   #loss_val = losses.flip_xent_loss(logits, labels, weights, num_labels)
