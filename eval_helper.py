@@ -15,7 +15,7 @@ FLAGS = tf.app.flags.FLAGS
 
 from datasets.cityscapes.cityscapes import CityscapesDataset
 
-def evaluate_segmentation(sess, epoch_num, run_ops, num_examples):
+def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=None):
   print('\nValidation performance:')
   conf_mat = np.ascontiguousarray(
       np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64))
@@ -23,7 +23,7 @@ def evaluate_segmentation(sess, epoch_num, run_ops, num_examples):
   for step in range(num_examples):
     start_time = time.time()
     if len(run_ops) == 4:
-      loss_val, logits, labels, img_names = sess.run(run_ops)
+      loss_val, logits, labels, img_names = sess.run(run_ops, feed_dict=get_feed_dict())
     elif len(run_ops) == 5:
       loss_val, logits, labels, img_names, logits_mid = sess.run(run_ops)
     else:
@@ -189,7 +189,11 @@ def compute_errors(conf_mat, name, class_info, verbose=True):
     print(name + ' pixel accuracy = %.2f %%' % avg_pixel_acc)
   return avg_pixel_acc, avg_class_iou, avg_class_recall, avg_class_precision, total_size
 
-def plot_training_progress(save_dir, plot_data):
+def plot_training_progress(save_dir, train_data, valid_data):
+
+  pass
+
+def plot_training_progress_pdf(save_dir, train_data, valid_data):
   fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16,8))
 
   linewidth = 2
@@ -198,13 +202,13 @@ def plot_training_progress(save_dir, plot_data):
   train_color = 'm'
   val_color = 'c'
 
-  train_loss = plot_data['train_loss']
-  valid_loss = plot_data['valid_loss']
-  train_iou = plot_data['train_iou']
-  valid_iou = plot_data['valid_iou']
-  train_acc = plot_data['train_acc']
-  valid_acc = plot_data['valid_acc']
-  lr = plot_data['lr']
+  train_loss = train_data['loss']
+  valid_loss = valid_data['loss']
+  #train_iou = plot_data['train_iou']
+  valid_iou = valid_data['iou']
+  #train_acc = plot_data['train_acc']
+  valid_acc = valid_data['acc']
+  lr = train_data['lr']
   x_data = np.linspace(1, len(train_loss), len(train_loss))
   ax1.set_title('cross entropy loss', fontsize=title_size)
   ax1.plot(x_data, train_loss, marker='o', color=train_color, linewidth=linewidth, linestyle='-', \
@@ -213,14 +217,14 @@ def plot_training_progress(save_dir, plot_data):
       label='validation')
   ax1.legend(loc='upper right', fontsize=legend_size)
   ax2.set_title('IoU accuracy')
-  ax2.plot(x_data, train_iou, marker='o', color=train_color, linewidth=linewidth, linestyle='-',
-      label='train')
+  #ax2.plot(x_data, train_iou, marker='o', color=train_color, linewidth=linewidth, linestyle='-',
+  #    label='train')
   ax2.plot(x_data, valid_iou, marker='o', color=val_color, linewidth=linewidth, linestyle='-',
       label='validation')
   ax2.legend(loc='upper left', fontsize=legend_size)
   ax3.set_title('pixel accuracy')
-  ax3.plot(x_data, train_acc, marker='o', color=train_color, linewidth=linewidth, linestyle='-',
-      label='train')
+  #ax3.plot(x_data, train_acc, marker='o', color=train_color, linewidth=linewidth, linestyle='-',
+  #    label='train')
   ax3.plot(x_data, valid_acc, marker='o', color=val_color, linewidth=linewidth, linestyle='-',
       label='validation')
   ax3.legend(loc='upper left', fontsize=legend_size)

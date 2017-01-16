@@ -3,7 +3,7 @@ import tensorflow as tf
 FLAGS = tf.app.flags.FLAGS
 
 
-def read_and_decode(filename_queue):
+def _read_and_decode(filename_queue, is_training):
   reader = tf.TFRecordReader()
   _, serialized_example = reader.read(filename_queue)
   features = tf.parse_single_example(
@@ -23,7 +23,8 @@ def read_and_decode(filename_queue):
   assert FLAGS.batch_size <= 2
   #labels = tf.decode_raw(features['labels'], tf.int32)
   labels = tf.to_int32(tf.decode_raw(features['labels'], tf.int8, name='decode_labels'))
-  image = tf.decode_raw(features['rgb'], tf.float32, name='decode_image')
+  #image = tf.decode_raw(features['rgb'], tf.float32, name='decode_image')
+  image = tf.to_float(tf.decode_raw(features['rgb'], tf.uint8, name='decode_image'))
   weights = tf.decode_raw(features['label_weights'], tf.float32, name='decode_weights')
   num_labels = features['num_labels']
   img_name = features['img_name']
@@ -67,10 +68,11 @@ def read_and_decode(filename_queue):
 
 
 def num_examples(dataset):
-  return int(2 * dataset.num_examples() / FLAGS.batch_size)
+  return int(dataset.num_examples())
+  #return int(2 * dataset.num_examples() / FLAGS.batch_size)
 
 
-def inputs(dataset, shuffle=True, num_epochs=None):
+def inputs(dataset, is_training=False, num_epochs=None):
   """Reads input data num_epochs times.
 
   Args:
@@ -87,6 +89,12 @@ def inputs(dataset, shuffle=True, num_epochs=None):
     Note that an tf.train.QueueRunner is added to the graph, which
     must be run using e.g. tf.train.start_queue_runners().
   """
+  shuffle = is_training
+  if is_training:
+    batch_size = FLAGS.batch_size
+  else:
+    #batch_size = 1
+    batch_size = FLAGS.batch_size
 
   with tf.name_scope('input'), tf.device('/cpu:0'):
     filename_queue = tf.train.string_input_producer(dataset.get_filenames(),
@@ -94,15 +102,17 @@ def inputs(dataset, shuffle=True, num_epochs=None):
     
     #filename_queue_size = tf.Print(filename_queue.size(), [filename_queue.size()])
     #with tf.control_dependencies([filename_queue_size]):
-    image, labels, weights, num_labels, img_name = read_and_decode(filename_queue)
+    image, labels, weights, num_labels, img_name = _read_and_decode(filename_queue,
+        is_training)
 
     # Shuffle the examples and collect them into batch_size batches.
     # (Internally uses a RandomShuffleQueue)
     # Run this in two threads to avoid being a bottleneck.
     image, labels, weights, num_labels, img_name = tf.train.batch(
-        [image, labels, weights, num_labels, img_name], batch_size=FLAGS.batch_size, num_threads=2,
+        [image, labels, weights, num_labels, img_name], batch_size=batch_size, num_threads=2,
         #[image, labels, weights, num_labels, img_name], batch_size=2, num_threads=2,
         enqueue_many=True, capacity=64)
+        #enqueue_many=True, capacity=64)
 
     return image, labels, weights, num_labels, img_name
 

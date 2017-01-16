@@ -13,7 +13,8 @@ import tensorflow.contrib.layers as layers
 from tensorflow.contrib.framework import arg_scope
 
 import losses
-import datasets.reader as reader
+#import datasets.reader as reader
+import datasets.flip_reader as reader
 
 FLAGS = tf.app.flags.FLAGS
 HEAD_PREFIX = 'head'
@@ -33,7 +34,7 @@ MEAN_BGR = [75.08929598, 85.01498926, 75.2051479]
 
 def evaluate(name, sess, epoch_num, run_ops, dataset, data):
   loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation(
-      sess, epoch_num, run_ops, dataset.num_examples())
+      sess, epoch_num, run_ops, dataset.num_examples(), get_feed_dict=get_valid_feed)
   if iou > data['best_iou'][0]:
     data['best_iou'] = [iou, epoch_num]
   data['iou'] += [iou]
@@ -41,8 +42,9 @@ def evaluate(name, sess, epoch_num, run_ops, dataset, data):
   data['loss'] += [loss_val]
 
 def plot_results(train_data, valid_data):
-  eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'),
-                                     train_data, valid_data)
+  pass
+  #eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'),
+  #                                   train_data, valid_data)
   #eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats')), train_data)
 
 
@@ -113,7 +115,68 @@ def upsample(net, name):
     net = tf.contrib.layers.convolution2d_transpose(net, num_filters, kernel_size=3, stride=2)
     return net
 
+def pyramid_pooling_BAD(net, name):
+  with tf.variable_scope(name):
+    #shape = net.get_shape().as_list()
+    shape = tf.shape(net)
+    height = shape[1]
+    width = shape[2]
+    dim = shape[3]
+    grid_size = [6, 3, 2, 1]
+    #grid_size = [3, 6, 9, 18]
+    #pool_dim = int(round(dim / len(grid_size)))
+    print(dim)
+    pool_dim = tf.to_int64(tf.round(dim / len(grid_size)))
+    print('LALA')
+    print(pool_dim)
+    concat_lst = [net]
+    for s in grid_size:
+      #kh = int(round(height / s))
+      kh = tf.to_int64(tf.round(height / s))
+      #kw = int(round(width / s))
+      kw = tf.to_int64(tf.round(width / s))
+      print(kh, kw)
+      #pool = layers.avg_pool2d(net, kernel_size=[kh, kw], stride=[kh, kw], padding='SAME')
+      #pool = layers.avg_pool2d(net, kernel_size=[kh, kh], stride=[kh, kh], padding='SAME')
+      pool = layers.avg_pool2d(net, kernel_size=[kh, kh], stride=[kh, kh], padding='VALID')
+      print(pool)
+      pool = layers.convolution2d(pool, pool_dim, kernel_size=1, scope='conv_%dx%d'%(s,s))
+      pool = tf.image.resize_bilinear(pool, [height, width], name='resize_score')
+      concat_lst += [pool]
+      print(net)
+    return tf.concat(3, concat_lst)
+
 def pyramid_pooling(net, name):
+  with tf.variable_scope(name):
+    shape = net.get_shape().as_list()
+    dim = shape[3]
+    shape = tf.shape(net)
+    height = shape[1]
+    width = shape[2]
+    pool_sizes = [2, 2, 2, 2]
+    #grid_size = [3, 6, 9, 18]
+    pool_dim = int(round(dim / len(pool_sizes)))
+    #pool_dim = tf.to_int64(tf.round(dim / len(grid_size)))
+    concat_lst = [net]
+    #for s in grid_size:
+    for i, k in enumerate(pool_sizes):
+      #kh = int(round(height / s))
+      #kh = tf.to_int64(tf.round(height / s))
+      #kw = int(round(width / s))
+      #kw = tf.to_int64(tf.round(width / s))
+      #print(kh, kw)
+      #pool = layers.avg_pool2d(net, kernel_size=[kh, kw], stride=[kh, kw], padding='SAME')
+      #pool = layers.avg_pool2d(net, kernel_size=[kh, kh], stride=[kh, kh], padding='SAME')
+      #net = layers.avg_pool2d(net, kernel_size=[k, k], stride=[k, k], padding='VALID')
+      net = layers.avg_pool2d(net, kernel_size=[k, k], stride=[k, k], padding='SAME')
+      #net = tf.Print(net, [tf.shape(net)], message='SHAPE = ')
+      #print(pool)
+      pool = layers.convolution2d(net, pool_dim, kernel_size=1, scope='conv_avg_pool_%d'%(i))
+      pool = tf.image.resize_bilinear(pool, [height, width], name='resize_score')
+      concat_lst += [pool]
+    return tf.concat(3, concat_lst)
+
+def pyramid_pooling2(net, name):
   with tf.variable_scope(name):
     shape = net.get_shape().as_list()
     print(shape)
@@ -231,20 +294,20 @@ def _build(image, is_training):
   skip_layers += [l]
 
   bsz = 2
+  paddings, crops = tf.required_space_to_batch_paddings(tf.shape(l)[1:3], [bsz, bsz])
   #print(l.get_shape())
-  ##paddings, crops = tf.required_space_to_batch_paddings(l.get_shape(), [bsz, bsz])
-  l = tf.space_to_batch(l, paddings=PADDINGS, block_size=bsz)
+  l = tf.space_to_batch(l, paddings=paddings, block_size=bsz)
   l = layer(l, 'group2', 256, defs[2], 1)
-  l = tf.batch_to_space(l, crops=CROPS, block_size=bsz)
-
+  l = tf.batch_to_space(l, crops=crops, block_size=bsz)
   #l = layer(l, 'group2', 256, defs[2], 2)
+
   bsz = 4
   ##bsz = 2
-  l = tf.space_to_batch(l, paddings=PADDINGS, block_size=bsz)
+  paddings, crops = tf.required_space_to_batch_paddings(tf.shape(l)[1:3], [bsz, bsz])
+  l = tf.space_to_batch(l, paddings=paddings, block_size=bsz)
   l = layer(l, 'group3', 512, defs[3], 1)
-  l = tf.batch_to_space(l, crops=CROPS, block_size=bsz)
+  l = tf.batch_to_space(l, crops=crops, block_size=bsz)
   #l = layer(l, 'group3', 512, defs[3], 1, rate=2)
-  print(l)
   #l = layer(l, 'group3', 512, defs[3], 1)
 
   #l = layer(l, 'group2', 256, defs[2], 1, rate=2)
@@ -270,7 +333,15 @@ def _build(image, is_training):
           activation_fn=None, weights_initializer=init_func, normalizer_fn=None,
           scope='logits')
           #weights_regularizer=None, scope='logits')
-    logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
+    input_shape = tf.shape(image)
+    print(input_shape)
+    #global resize_height, resize_width
+    height = input_shape[1]
+    width = input_shape[2]
+    #height = tf.Print(height, [height, width], message='SHAPE = ')
+    #logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
+    #logits = tf.image.resize_bilinear(logits, [resize_height, resize_width],
+    logits = tf.image.resize_bilinear(logits, [height, width],
                                       name='resize_logits')
   return logits
   
@@ -351,11 +422,62 @@ def create_init_op(params):
   init_op, init_feed = tf.contrib.framework.assign_from_values(init_map)
   return init_op, init_feed
 
+def jitter(image, labels, weights):
+  global random_flip_tf, resize_width, resize_height
+  random_flip_tf = tf.placeholder(tf.bool, shape=(), name='random_flip')
+  resize_width = tf.placeholder(tf.int32, shape=(), name='resize_width')
+  resize_height = tf.placeholder(tf.int32, shape=(), name='resize_height')
+  
+  image_split = tf.unstack(image, axis=0)
+  weights_split = tf.unstack(weights, axis=0)
+  labels_split = tf.unstack(labels, axis=0)
+  out_img = []
+  out_weights = []
+  out_labels = []
+  for i in range(FLAGS.batch_size):
+    out_img.append(tf.cond(random_flip_tf, lambda: tf.image.flip_left_right(image_split[i]),
+                       lambda: image_split[i]))
+    #print(cond_op)
+    #image_split[i] = tf.assign(image_split[i], cond_op)
+    #image[i] = tf.cond(random_flip_tf, lambda: tf.image.flip_left_right(image[i]),
+    #cond_op = tf.cond(random_flip_tf, lambda: tf.image.flip_left_right(image[i]),
+                       #lambda: tf.identity(image[i]))
+    #image[i] = tf.assign(image[i], cond_op)
+    out_labels.append(tf.cond(random_flip_tf, lambda: tf.image.flip_left_right(labels[i]),
+                      lambda: labels[i]))
+    out_weights.append(tf.cond(random_flip_tf, lambda: tf.image.flip_left_right(weights[i]),
+                       lambda: weights[i]))
+  image = tf.stack(out_img, axis=0)
+  weights = tf.stack(out_weights, axis=0)
+  labels = tf.stack(out_labels, axis=0)
+
+  image = tf.image.resize_bicubic(image, [resize_height, resize_width])
+  labels = tf.image.resize_nearest_neighbor(labels, [resize_height, resize_width])
+  weights = tf.image.resize_nearest_neighbor(weights, [resize_height, resize_width])
+  return image, labels, weights
+
+
+def get_train_feed():
+  global random_flip_tf, resize_width, resize_height
+  random_flip = int(np.random.choice(2, 1))
+  #resize_scale = np.random.uniform(0.5, 2)
+  resize_scale = np.random.uniform(0.4, 1.5)
+  width = np.int32(int(round(FLAGS.img_width * resize_scale)))
+  height = np.int32(int(round(FLAGS.img_height * resize_scale)))
+  feed_dict = {random_flip_tf:random_flip, resize_width:width, resize_height:height}
+  return feed_dict
+
+def get_valid_feed():
+  global random_flip_tf, resize_width, resize_height
+  feed_dict = {random_flip_tf:0, resize_width:0, resize_height:0}
+  return feed_dict
 
 def build(dataset, is_training, reuse=False):
   # Get images and labels.
-  image, labels, weights, num_labels, img_names = reader.inputs(
+  image, labels, weights, _, img_names = reader.inputs(
       dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
+  if is_training:
+    image, labels, weights = jitter(image, labels, weights)
   image = normalize_input(image)
 
   if reuse:
@@ -375,7 +497,7 @@ def build(dataset, is_training, reuse=False):
       #print(v.shape)
 
   logits = _build(image, is_training)
-  total_loss = loss(logits, labels, weights, num_labels, is_training)
+  total_loss = loss(logits, labels, weights, is_training)
 
   #all_vars = tf.contrib.framework.get_variables()
   #for v in all_vars:
@@ -385,7 +507,6 @@ def build(dataset, is_training, reuse=False):
     return [total_loss], init_op, init_feed
   else:
     return [total_loss, logits, labels, img_names]
-
 
 def minimize(opts, loss, global_step):
   all_vars = tf.trainable_variables()
@@ -402,53 +523,36 @@ def minimize(opts, loss, global_step):
   train_op2 = opts[1].apply_gradients(head_grads_and_vars, global_step=global_step)
   return tf.group(train_op1, train_op2)
 
-def minimizeold(opt, loss, global_step):
-  #resnet_vars = tf.trainable_variables()
-  all_vars = tf.trainable_variables()
-  resnet_vars = []
-  head_vars = []
-  for v in all_vars:
-    if v.name[:4] == 'head':
-      print(v.name)
-      head_vars += [v]
-    else:
-      resnet_vars += [v]
-  grads_and_vars = opt.compute_gradients(loss, resnet_vars + head_vars)
-  resnet_gv = grads_and_vars[:len(resnet_vars)]
-  head_gv = grads_and_vars[len(resnet_vars):]
-  lr_mul = 10
-  #lr_mul = 1
-  print(head_gv[0])
-  #head_gv = [[g*lr_mul, v] for g,v in head_gv]
-  print(head_gv[0])
-  #  ygrad, _ = grads_and_vars[1]
-  train_op = opt.apply_gradients(resnet_gv + head_gv, global_step=global_step)
-  return train_op
+#def minimize(opt, loss, global_step):
+#  #resnet_vars = tf.trainable_variables()
+#  all_vars = tf.trainable_variables()
+#  resnet_vars = []
+#  head_vars = []
+#  for v in all_vars:
+#    if v.name[:4] == 'head':
+#      print(v.name)
+#      head_vars += [v]
+#    else:
+#      resnet_vars += [v]
+#  grads_and_vars = opt.compute_gradients(loss, resnet_vars + head_vars)
+#  resnet_gv = grads_and_vars[:len(resnet_vars)]
+#  head_gv = grads_and_vars[len(resnet_vars):]
+#  lr_mul = 10
+#  #lr_mul = 1
+#  print(head_gv[0])
+#  #head_gv = [[g*lr_mul, v] for g,v in head_gv]
+#  print(head_gv[0])
+#  #  ygrad, _ = grads_and_vars[1]
+#  train_op = opt.apply_gradients(resnet_gv + head_gv, global_step=global_step)
+#  return train_op
 
-  #my_vars = [the rest of variables]
-  #opt1 = tf.train.GradientDescentOptimizer(0.00001)
-  #opt2 = tf.train.GradientDescentOptimizer(0.0001)
-  #grads = tf.gradients(loss, var_list1 + var_list2)
-  #grads1 = grads[:len(var_list1)]
-  #grads2 = grads[len(var_list1):]
-  #tran_op1 = opt1.apply_gradients(zip(grads1, var_list1))
-  #train_op2 = opt2.apply_gradients(zip(grads2, var_list2))
-  #train_op = tf.group(train_op1, train_op2)
-  #x = tf.Variable(tf.ones([]))
-  #y = tf.Variable(tf.zeros([]))
-  #loss = tf.square(x-y)
-  #global_step = tf.Variable(0, name="global_step", trainable=False)
 
-  #  opt = tf.GradientDescentOptimizer(learning_rate=0.1)
-  #  grads_and_vars = opt.compute_gradients(loss, [x, y])
-  #  ygrad, _ = grads_and_vars[1]
-  #  train_op = opt.apply_gradients([grads_and_vars[0], (ygrad*2, y)], global_step=global_step)
-
-def loss(logits, labels, weights, num_labels, is_training=True):
+def loss(logits, labels, weights, is_training=True):
   # TODO
+  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=10)
+  #loss_val = losses.flip_xent_loss(logits, labels, weights, max_weight=10)
   #loss_tf = tf.contrib.losses.softmax_cross_entropy()
   #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights)
-  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=10)
   #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=1)
   #loss_val = losses.weighted_hinge_loss(logits, labels, weights, num_labels)
   #loss_val = losses.flip_xent_loss(logits, labels, weights, num_labels)

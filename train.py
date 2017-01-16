@@ -49,11 +49,14 @@ def train(model, train_dataset, valid_dataset):
     loss = train_ops[0]
 
     # Add a summary to track the learning rate.
-    tf.scalar_summary('learning_rate', lr)
+    #tf.scalar_summary('learning_rate', lr)
+    tf.summary.scalar('learning_rate', lr)
 
     print('Using optimizer:', FLAGS.optimizer)
+    opts = []
     if FLAGS.optimizer == 'Adam':
-      opt = tf.train.AdamOptimizer(lr)
+      opts += [tf.train.AdamOptimizer(lr)]
+      opts += [tf.train.AdamOptimizer(10*lr)]
     elif FLAGS.optimizer == 'Momentum':
       opt = tf.train.MomentumOptimizer(lr, FLAGS.momentum)
       #opt = tf.train.GradientDescentOptimizer(lr)
@@ -62,7 +65,7 @@ def train(model, train_dataset, valid_dataset):
     else:
       raise ValueError()
 
-    train_op = model.minimize(opt, loss, global_step)
+    train_op = model.minimize(opts, loss, global_step)
 
     #grads = opt.compute_gradients(loss)
     #train_op = opt.apply_gradients(grads, global_step=global_step)
@@ -104,42 +107,50 @@ def train(model, train_dataset, valid_dataset):
       resnet_restore.restore(sess, FLAGS.resume_path)
 
     # Build the summary operation based on the TF collection of Summaries.
-    summary_op = tf.merge_all_summaries()
+    #summary_op = tf.merge_all_summaries()
+    summary_op = tf.summary.merge_all()
 
     # Start the queue runners.
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
-    summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, graph=sess.graph)
+    #summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, graph=sess.graph)
+    #TODO tf.summary.FileWriter()
 
     init_vars = train_helper.get_variables(sess)
     #train_helper.print_variable_diff(sess, init_vars)
-    #variable_map = train_helper.get_variable_map()
+    variable_map = train_helper.get_variable_map()
     num_params = train_helper.get_num_params()
     print('Number of parameters = ', num_params)
     # take the train loss moving average
-    #loss_avg_train = variable_map['total_loss/avg:0']
+    loss_avg_train = variable_map['total_loss/avg:0']
+    train_loss_val = 0
     train_data, valid_data = model.init_eval_data()
     ex_start_time = time.time()
     for epoch_num in range(1, FLAGS.max_epochs + 1):
+      train_loss_sum = 0
       print('\ntensorboard --logdir=' + FLAGS.train_dir + '\n')
       train_data['lr'] += [lr.eval(session=sess)]
       num_batches = model.num_examples(train_dataset) // FLAGS.num_validations_per_epoch
       for step in range(num_batches):
-      #for step in range(100):
+      #for step in range(10):
         start_time = time.time()
+        feed_dict = model.get_train_feed()
         run_ops = train_ops + [train_op, global_step]
         #run_ops = [train_op, loss, logits, labels, draw_data, img_name, global_step]
-        if step % 300 == 0:
-          #run_ops += [summary_op, loss_avg_train]
-          run_ops += [summary_op]
-          ret_val = sess.run(run_ops)
+        if False:
+        #if step % 400 == 0:
+          run_ops += [summary_op, loss_avg_train]
+          #run_ops += [summary_op]
+          ret_val = sess.run(run_ops, feed_dict=feed_dict)
           loss_val = ret_val[0]
-          summary_str = ret_val[-1]
-          global_step_val = ret_val[-2]
+          train_loss_val = ret_val[-1]
+          summary_str = ret_val[-2]
+          global_step_val = ret_val[-3]
           summary_writer.add_summary(summary_str, global_step_val)
         else:
-          ret_val = sess.run(run_ops)
+          ret_val = sess.run(run_ops, feed_dict=feed_dict)
+          #ret_val = sess.run(run_ops)
           loss_val = ret_val[0]
           #train_helper.print_grad_stats(grads_val, grad_tensors)
           #run_metadata = tf.RunMetadata()
@@ -157,7 +168,10 @@ def train(model, train_dataset, valid_dataset):
         assert not np.isnan(loss_val), 'Model diverged with loss = NaN'
 
         ## estimate training accuracy on the last 30% of the epoch
-        #if step > int(0.7 * num_batches):
+        #train_error_factor = 0.3
+        #train_error_factor = 1
+        #if step > int((1-train_error_factor) * num_batches):
+        #  train_loss_sum += loss_val
         #  #label_map = scores[0].argmax(2).astype(np.int32)
         #  label_map = scores.argmax(3).astype(np.int32)
         #  #print(label_map.shape)
@@ -182,7 +196,7 @@ def train(model, train_dataset, valid_dataset):
       #train_helper.print_variable_diff(sess, init_vars)
       model.evaluate('valid', sess, epoch_num, valid_ops, valid_dataset, valid_data)
       model.print_results(valid_data)
-      #model.plot_results(train_data, valid_data)
+      train_data['loss'] += [train_loss_val]
 
       #train_pixacc, train_iou, _, _, _ = eval_helper.compute_errors(conf_mat, 'Train',
       #    CityscapesDataset.CLASS_INFO)
@@ -191,11 +205,7 @@ def train(model, train_dataset, valid_dataset):
       #  sess, epoch_num, logits_valid, loss_valid,
       #  labels_valid, img_name_valid, valid_dataset, reader)
 
-      ##print_best_result()
-      #if valid_iou >= max_valid_iou:
-      #  max_valid_iou = valid_iou
-      #if epoch_num > 1:
-      #  print('Best IoU = ', max_valid_iou)
+      model.plot_results(train_data, valid_data)
       #  eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'), plot_data)
 
       ## Save the best model checkpoint

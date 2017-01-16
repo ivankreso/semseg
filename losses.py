@@ -27,8 +27,10 @@ def add_loss_summaries(total_loss):
     #print(l.op.name)
     # Name each loss as '(raw)' and name the moving average version of the loss
     # as the original loss name.
-    tf.scalar_summary(l.op.name + ' (raw)', l)
-    tf.scalar_summary(l.op.name, loss_averages.average(l))
+    #tf.scalar_summary(l.op.name + ' (raw)', l)
+    #tf.scalar_summary(l.op.name, loss_averages.average(l))
+    tf.summary.scalar(l.op.name + ' (raw)', l)
+    tf.summary.scalar(l.op.name, loss_averages.average(l))
     #tf.scalar_summary([l.op.name + ' (raw)'], l)
     #tf.scalar_summary([l.op.name], loss_averages.average(l))
 
@@ -59,9 +61,10 @@ def weighted_cross_entropy_loss(logits, labels, weights=None, max_weight=100):
 #def weighted_cross_entropy_loss(logits, labels, weights=None, max_weight=1e2):
 #def weighted_cross_entropy_loss(logits, labels, weights=None, max_weight=1e3):
   print('loss: Weighted Cross Entropy Loss')
-  print(labels)
   shape = labels.get_shape().as_list()
-  num_examples = shape[0] * shape[1]
+  print(shape)
+  #num_examples = shape[0] * shape[1]
+  num_examples = -1
   #num_examples = FLAGS.batch_size * FLAGS.img_height * FLAGS.img_width
   with tf.name_scope(None, 'WeightedCrossEntropyLoss', [logits, labels]):
     labels = tf.reshape(labels, shape=[num_examples])
@@ -81,9 +84,34 @@ def weighted_cross_entropy_loss(logits, labels, weights=None, max_weight=100):
     #weighted_xent = xent
 
     total_loss = tf.div(tf.reduce_sum(xent), tf.to_float(num_labels), name='value')
+    print(total_loss)
+    return total_loss
 
-    #tf.add_to_collection(slim.losses.LOSSES_COLLECTION, total_loss)
-    return tf.reduce_mean(total_loss)
+
+def flip_xent_loss(logits, labels, weights, max_weight=10):
+  print('Loss: Weighted Cross Entropy Loss')
+  assert(FLAGS.batch_size == 2)
+  num_examples = FLAGS.batch_size * FLAGS.img_height * FLAGS.img_width
+  labels = tf.reshape(labels, shape=[num_examples])
+  weights = tf.reshape(weights, shape=[num_examples])
+  #num_labels = tf.to_float(tf.reduce_sum(num_labels))
+  with tf.name_scope('FlipXentLoss', [logits, labels]):
+    one_hot_labels = tf.one_hot(tf.to_int64(labels), FLAGS.num_classes, 1, 0)
+    one_hot_labels = tf.reshape(one_hot_labels, [num_examples, FLAGS.num_classes])
+    num_labels = tf.to_float(tf.reduce_sum(one_hot_labels))
+    #print(logits[].get_shape())
+    logits_1d = tf.reshape(logits, [num_examples, FLAGS.num_classes])
+    # TODO
+    #log_softmax = tf.log(tf.nn.softmax(logits_1d))
+    log_softmax = tf.nn.log_softmax(logits_1d)
+    xent = tf.reduce_sum(tf.mul(tf.to_float(one_hot_labels), log_softmax), 1)
+    #weighted_xent = tf.mul(weights, xent)
+    weighted_xent = tf.mul(tf.minimum(tf.to_float(max_weight), weights), xent)
+    #weighted_xent = xent
+
+    total_loss = - tf.div(tf.reduce_sum(weighted_xent), num_labels, name='value')
+    return total_loss
+
 
 
 def slim_cross_entropy_loss(logits, labels, num_labels):
@@ -256,26 +284,3 @@ def flip_xent_loss_symmetric(logits, labels, weights, num_labels):
     tf.add_to_collection(slim.losses.LOSSES_COLLECTION, total_loss)
     return total_loss
 
-def flip_xent_loss(logits, labels, weights, num_labels):
-  print('Loss: Weighted Cross Entropy Loss')
-  num_examples = 2 * FLAGS.img_height * FLAGS.img_width
-  labels = tf.reshape(labels, shape=[num_examples])
-  weights = tf.reshape(weights, shape=[num_examples])
-  num_labels = tf.to_float(tf.reduce_sum(num_labels))
-  with tf.op_scope([logits, labels], None, 'WeightedCrossEntropyLoss'):
-    one_hot_labels = tf.one_hot(tf.to_int64(labels), FLAGS.num_classes, 1, 0)
-    one_hot_labels = tf.reshape(one_hot_labels, [num_examples, FLAGS.num_classes])
-    #print(logits[].get_shape())
-    logits_1d = tf.reshape(logits, [num_examples, FLAGS.num_classes])
-    # TODO
-    #log_softmax = tf.log(tf.nn.softmax(logits_1d))
-    log_softmax = tf.nn.log_softmax(logits_1d)
-    xent = tf.reduce_sum(tf.mul(tf.to_float(one_hot_labels), log_softmax), 1)
-    #weighted_xent = tf.mul(weights, xent)
-    weighted_xent = tf.mul(tf.minimum(tf.to_float(100), weights), xent)
-    #weighted_xent = xent
-
-    total_loss = - tf.div(tf.reduce_sum(weighted_xent), num_labels, name='value')
-
-    tf.add_to_collection(slim.losses.LOSSES_COLLECTION, total_loss)
-    return total_loss
