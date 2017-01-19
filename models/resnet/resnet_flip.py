@@ -14,7 +14,8 @@ from tensorflow.contrib.framework import arg_scope
 
 import losses
 #import datasets.reader as reader
-import datasets.flip_reader as reader
+#import datasets.flip_reader as reader
+import datasets.reader_jitter as reader
 
 FLAGS = tf.app.flags.FLAGS
 HEAD_PREFIX = 'head'
@@ -42,9 +43,8 @@ def evaluate(name, sess, epoch_num, run_ops, dataset, data):
   data['loss'] += [loss_val]
 
 def plot_results(train_data, valid_data):
-  pass
-  #eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'),
-  #                                   train_data, valid_data)
+  eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'),
+                                     train_data, valid_data)
   #eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats')), train_data)
 
 
@@ -320,10 +320,11 @@ def _build(image, is_training):
         normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
         weights_initializer=init_func,
         weights_regularizer=layers.l2_regularizer(weight_decay)):
-      l = pyramid_pooling(l, 'pyramid_pooling')
-      #l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv1') # faster
-      l = layers.convolution2d(l, 512, kernel_size=3, scope='conv1') # faster
-      #l = layers.convolution2d(l, 512, kernel_size=5, rate=2, scope='conv2')
+      #l = pyramid_pooling(l, 'pyramid_pooling')
+      #l = layers.convolution2d(l, 512, kernel_size=3, scope='conv1') # faster
+      l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv1') # faster
+      l = layers.convolution2d(l, 512, kernel_size=5, rate=2, scope='conv2')
+      #l = tf.Print(l, [tf.shape(image)], message='IMG SHAPE = ')
       #l = layers.convolution2d(l, 512, kernel_size=5, rate=8, scope='conv2')
       #l = layers.convolution2d(l, 1024, kernel_size=1, scope='conv2')
       #l = layers.convolution2d(l, 1024, kernel_size=1, activation_fn=None, scope='conv2')
@@ -461,7 +462,9 @@ def get_train_feed():
   global random_flip_tf, resize_width, resize_height
   random_flip = int(np.random.choice(2, 1))
   #resize_scale = np.random.uniform(0.5, 2)
-  resize_scale = np.random.uniform(0.4, 1.5)
+  #resize_scale = np.random.uniform(0.4, 1.5)
+  #resize_scale = np.random.uniform(0.5, 1.2)
+  resize_scale = np.random.uniform(0.6, 1.4)
   width = np.int32(int(round(FLAGS.img_width * resize_scale)))
   height = np.int32(int(round(FLAGS.img_height * resize_scale)))
   feed_dict = {random_flip_tf:random_flip, resize_width:width, resize_height:height}
@@ -549,7 +552,8 @@ def minimize(opts, loss, global_step):
 
 def loss(logits, labels, weights, is_training=True):
   # TODO
-  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=10)
+  #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=10)
+  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=100)
   #loss_val = losses.flip_xent_loss(logits, labels, weights, max_weight=10)
   #loss_tf = tf.contrib.losses.softmax_cross_entropy()
   #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights)
@@ -569,5 +573,5 @@ def loss(logits, labels, weights, is_training=True):
 
   return total_loss
 
-def num_examples(dataset):
+def num_batches(dataset):
   return reader.num_examples(dataset)

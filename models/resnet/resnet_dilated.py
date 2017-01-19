@@ -33,7 +33,7 @@ MEAN_BGR = [75.08929598, 85.01498926, 75.2051479]
 
 def evaluate(name, sess, epoch_num, run_ops, dataset, data):
   loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation(
-      sess, epoch_num, run_ops, dataset.num_examples())
+      sess, epoch_num, run_ops, dataset.num_examples(), get_feed_dict=get_train_feed)
   if iou > data['best_iou'][0]:
     data['best_iou'] = [iou, epoch_num]
   data['iou'] += [iou]
@@ -273,7 +273,9 @@ def _build(image, is_training):
     logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
                                       name='resize_logits')
   return logits
-  
+
+def get_train_feed():
+  return {}
 
 def name_conversion(caffe_layer_name, prefix=''):
   """ Convert a caffe parameter name to a tensorflow parameter name as
@@ -448,7 +450,7 @@ def loss(logits, labels, weights, num_labels, is_training=True):
   # TODO
   #loss_tf = tf.contrib.losses.softmax_cross_entropy()
   #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights)
-  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=10)
+  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=100)
   #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=1)
   #loss_val = losses.weighted_hinge_loss(logits, labels, weights, num_labels)
   #loss_val = losses.flip_xent_loss(logits, labels, weights, num_labels)

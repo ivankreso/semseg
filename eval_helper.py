@@ -190,10 +190,6 @@ def compute_errors(conf_mat, name, class_info, verbose=True):
   return avg_pixel_acc, avg_class_iou, avg_class_recall, avg_class_precision, total_size
 
 def plot_training_progress(save_dir, train_data, valid_data):
-
-  pass
-
-def plot_training_progress_pdf(save_dir, train_data, valid_data):
   fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16,8))
 
   linewidth = 2
@@ -211,8 +207,8 @@ def plot_training_progress_pdf(save_dir, train_data, valid_data):
   lr = train_data['lr']
   x_data = np.linspace(1, len(train_loss), len(train_loss))
   ax1.set_title('cross entropy loss', fontsize=title_size)
-  ax1.plot(x_data, train_loss, marker='o', color=train_color, linewidth=linewidth, linestyle='-', \
-      label='train')
+  ax1.plot(x_data, train_loss, marker='o', color=train_color, linewidth=linewidth,
+      linestyle='-', label='train')
   ax1.plot(x_data, valid_loss, marker='o', color=val_color, linewidth=linewidth, linestyle='-',
       label='validation')
   ax1.legend(loc='upper right', fontsize=legend_size)

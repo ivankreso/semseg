@@ -37,10 +37,13 @@ def train(model, train_dataset, valid_dataset):
                                   trainable=False)
 
     # Calculate the learning rate schedule.
-    num_batches_per_epoch = (model.num_examples(train_dataset) / FLAGS.batch_size)
+    #num_batches_per_epoch = (model.num_examples(train_dataset) / FLAGS.batch_size)
+    num_batches_per_epoch = model.num_batches(train_dataset)
     decay_steps = int(num_batches_per_epoch * FLAGS.num_epochs_per_decay)
     # Decay the learning rate exponentially based on the number of steps.
     lr = tf.train.exponential_decay(FLAGS.initial_learning_rate, global_step, decay_steps,
+                                    FLAGS.learning_rate_decay_factor, staircase=True)
+    lr2 = tf.train.exponential_decay(10*FLAGS.initial_learning_rate, global_step, decay_steps,
                                     FLAGS.learning_rate_decay_factor, staircase=True)
 
     # Build a Graph that computes the logits predictions from the inference model.
@@ -56,7 +59,7 @@ def train(model, train_dataset, valid_dataset):
     opts = []
     if FLAGS.optimizer == 'Adam':
       opts += [tf.train.AdamOptimizer(lr)]
-      opts += [tf.train.AdamOptimizer(10*lr)]
+      opts += [tf.train.AdamOptimizer(lr2)]
     elif FLAGS.optimizer == 'Momentum':
       opt = tf.train.MomentumOptimizer(lr, FLAGS.momentum)
       #opt = tf.train.GradientDescentOptimizer(lr)
@@ -131,9 +134,8 @@ def train(model, train_dataset, valid_dataset):
       train_loss_sum = 0
       print('\ntensorboard --logdir=' + FLAGS.train_dir + '\n')
       train_data['lr'] += [lr.eval(session=sess)]
-      num_batches = model.num_examples(train_dataset) // FLAGS.num_validations_per_epoch
+      num_batches = model.num_batches(train_dataset) // FLAGS.num_validations_per_epoch
       for step in range(num_batches):
-      #for step in range(10):
         start_time = time.time()
         feed_dict = model.get_train_feed()
         run_ops = train_ops + [train_op, global_step]
@@ -152,6 +154,8 @@ def train(model, train_dataset, valid_dataset):
           ret_val = sess.run(run_ops, feed_dict=feed_dict)
           #ret_val = sess.run(run_ops)
           loss_val = ret_val[0]
+          if step % 100 == 0:
+            model.evaluate_output(ret_val, step)
           #train_helper.print_grad_stats(grads_val, grad_tensors)
           #run_metadata = tf.RunMetadata()
           #ret_val = sess.run(run_ops,
@@ -191,7 +195,7 @@ def train(model, train_dataset, valid_dataset):
             (%.1f examples/sec; %.3f sec/batch)'
           #print('lr = ', clr)
           print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num,
-                              step, model.num_examples(train_dataset), loss_val,
+                              step, model.num_batches(train_dataset), loss_val,
                               examples_per_sec, sec_per_batch))
       #train_helper.print_variable_diff(sess, init_vars)
       model.evaluate('valid', sess, epoch_num, valid_ops, valid_dataset, valid_data)
