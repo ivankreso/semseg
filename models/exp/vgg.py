@@ -1,4 +1,3 @@
-import pdb
 import tensorflow as tf
 import argparse
 import os, re
@@ -45,29 +44,27 @@ init_func = layers.variance_scaling_initializer()
 
 
 def evaluate(name, sess, epoch_num, run_ops, dataset, data):
-  num_examples = dataset.num_examples()
-  for step in trange(num_examples):
-    out = sess.run(run_ops)
-    if step % 50 == 0:
-      evaluate_output(out, step, 'valid')
-  #loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation(
-  #    sess, epoch_num, run_ops, dataset.num_examples(), get_feed_dict=get_valid_feed)
-  #if iou > data['best_iou'][0]:
-  #  data['best_iou'] = [iou, epoch_num]
-  #data['iou'] += [iou]
-  #data['acc'] += [accuracy]
-  #data['loss'] += [loss_val]
+  #num_examples = dataset.num_examples()
+  #for step in trange(num_examples):
+  #  out = sess.run(run_ops)
+  #  if step % 50 == 0:
+  #    evaluate_output(out, step, 'valid')
+  loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation(
+      sess, epoch_num, run_ops, dataset.num_examples(), get_feed_dict=get_valid_feed)
+  if iou > data['best_iou'][0]:
+    data['best_iou'] = [iou, epoch_num]
+  data['iou'] += [iou]
+  data['acc'] += [accuracy]
+  data['loss'] += [loss_val]
 
 def plot_results(train_data, valid_data):
-  pass
-  #eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'),
-  #                                   train_data, valid_data)
+  eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'),
+                                     train_data, valid_data)
   #eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats')), train_data)
 
 
 def print_results(data):
-  pass
-  #print('Best validation IOU = %.2f (epoch %d)' % tuple(data['best_iou']))
+  print('Best validation IOU = %.2f (epoch %d)' % tuple(data['best_iou']))
 
 def evaluate_output(out, step, name='train'):
   x = out[1][0]
@@ -86,9 +83,9 @@ def evaluate_output(out, step, name='train'):
   x = x.astype(np.uint8)
   #save_dir = FLAGS.debug_dir, 'train'
   save_dir = '/home/kivan/source/results/semseg/tf/tmp/' + name
-  path = os.path.join(save_dir, str(step)+'_img_rec.png')
+  path = os.path.join(save_dir, '%06d'%step + '_img_rec.png')
   cv.imwrite(path, x_rec)
-  path = os.path.join(save_dir, str(step)+'_img_raw.png')
+  path = os.path.join(save_dir, '%06d'%step + '_img_raw.png')
   cv.imwrite(path, x)
   
 
@@ -184,6 +181,7 @@ def unpool_layer_2(bottom, argmax):
 
 
 def unpool_layer(net, argmax_data):
+  num_maps = net.get_shape().as_list()[3]
   indices, top_shape = argmax_data
   #bottom_shape = tf.shape(net, out_type=tf.int64)
   #top_shape = [bottom_shape[0], bottom_shape[1]*2, bottom_shape[2]*2, bottom_shape[3]]
@@ -204,6 +202,7 @@ def unpool_layer(net, argmax_data):
   #net = tf.Print(net, [tf.shape(net)], message='U4_scat_end = ', summarize=10)
   net = tf.reshape(net, tf.to_int32(top_shape))
   #net = tf.Print(net, [tf.shape(net)], message='U4_reshape_end = ', summarize=10)
+  net.set_shape([None,None,None,num_maps])
   return net
 
 
@@ -217,32 +216,31 @@ def decode(net, argmax, bn_params):
     stride = [1,1,1,1]
     loss_data = []
 
-    #net = unpool_layer(net, argmax[-1])
+    net = unpool_layer(net, argmax[4])
     #net.set_shape([None,None,None,512])
-    #net = layers.convolution2d(net, 512, scope='dec_conv5_3')
-    #net = layers.convolution2d(net, 512, scope='dec_conv5_2')
-    #net = layers.convolution2d(net, 512, scope='dec_conv5_1')
-    #loss_data.append(net)
-    #net = unpool_layer(net, argmax[-2])
+    net = layers.convolution2d(net, 512, scope='dec_conv5_3')
+    net = layers.convolution2d(net, 512, scope='dec_conv5_2')
+    net = layers.convolution2d(net, 512, scope='dec_conv5_1')
+    loss_data.append(net)
+    net = unpool_layer(net, argmax[3])
     #net.set_shape([None,None,None,512])
-    #net = layers.convolution2d(net, 512, scope='dec_conv4_3')
-    #net = layers.convolution2d(net, 512, scope='dec_conv4_2')
-    #net = layers.convolution2d(net, 256, scope='dec_conv4_1')
-    #loss_data.append(net)
-    #net = unpool_layer(net, argmax[-3])
+    net = layers.convolution2d(net, 512, scope='dec_conv4_3')
+    net = layers.convolution2d(net, 512, scope='dec_conv4_2')
+    net = layers.convolution2d(net, 256, scope='dec_conv4_1')
+    loss_data.append(net)
+    net = unpool_layer(net, argmax[2])
     #net.set_shape([None,None,None,256])
-    #net = layers.convolution2d(net, 256, scope='dec_conv3_3')
-    #net = layers.convolution2d(net, 256, scope='dec_conv3_2')
-    #net = layers.convolution2d(net, 128, scope='dec_conv3_1')
-    #loss_data.append(net)
+    net = layers.convolution2d(net, 256, scope='dec_conv3_3')
+    net = layers.convolution2d(net, 256, scope='dec_conv3_2')
+    net = layers.convolution2d(net, 128, scope='dec_conv3_1')
+    loss_data.append(net)
     net = unpool_layer(net, argmax[1])
-    net.set_shape([None,None,None,128])
+    #net.set_shape([None,None,None,128])
     net = layers.convolution2d(net, 128, scope='dec_conv2_2')
-    #net = layers.convolution2d(net, 64, scope='dec_conv2_2')
     net = layers.convolution2d(net, 64, scope='dec_conv2_1')
     loss_data.append(net)
     net = unpool_layer(net, argmax[0])
-    net.set_shape([None,None,None,64])
+    #net.set_shape([None,None,None,64])
     net = layers.convolution2d(net, 64, scope='dec_conv1_2')
     #net = layers.convolution2d(net, 32, scope='dec_conv1_2')
     net = layers.convolution2d(net, 3, activation_fn=None, normalizer_fn=None,
@@ -298,64 +296,67 @@ def _build(x, is_training):
                   padding='SAME', name='pool2')
     argmax_data.append([argmax, up_shape])
     enc_data.append(net)
-    #net = layers.convolution2d(net, 256, scope='conv3_1')
-    #net = layers.convolution2d(net, 256, scope='conv3_2')
-    #net = layers.convolution2d(net, 256, scope='conv3_3')
-    ##net = layers.max_pool2d(net, 2, 2, scope='pool3')
-    #up_shape = tf.shape(net, out_type=tf.int64)
-    #net, argmax = tf.nn.max_pool_with_argmax(net, ksize, stride,
-    #              padding='SAME', name='pool3')
-    #argmax_data.append([argmax, up_shape])
-    #enc_data.append(net)
-    #net = layers.convolution2d(net, 512, scope='conv4_1')
-    #net = layers.convolution2d(net, 512, scope='conv4_2')
-    #net = layers.convolution2d(net, 512, scope='conv4_3')
-    ##net = layers.max_pool2d(net, 2, 2, scope='pool4')
-    #up_shape = tf.shape(net, out_type=tf.int64)
-    #net, argmax = tf.nn.max_pool_with_argmax(net, ksize, stride,
-    #              padding='SAME', name='pool4')
-    #argmax_data.append([argmax, up_shape])
-    #enc_data.append(net)
-    #net = layers.convolution2d(net, 512, scope='conv5_1')
-    #net = layers.convolution2d(net, 512, scope='conv5_2')
-    #net = layers.convolution2d(net, 512, scope='conv5_3')
-    ##net = layers.max_pool2d(net, 2, 2, scope='pool5')
-    #up_shape = tf.shape(net, out_type=tf.int64)
-    #net, argmax = tf.nn.max_pool_with_argmax(net, ksize, stride,
-    #              padding='SAME', name='pool5')
-    #argmax_data.append([argmax, up_shape])
+    net = layers.convolution2d(net, 256, scope='conv3_1')
+    net = layers.convolution2d(net, 256, scope='conv3_2')
+    net = layers.convolution2d(net, 256, scope='conv3_3')
+    #net = layers.max_pool2d(net, 2, 2, scope='pool3')
+    up_shape = tf.shape(net, out_type=tf.int64)
+    net, argmax = tf.nn.max_pool_with_argmax(net, ksize, stride,
+                  padding='SAME', name='pool3')
+    argmax_data.append([argmax, up_shape])
+    enc_data.append(net)
+    net = layers.convolution2d(net, 512, scope='conv4_1')
+    net = layers.convolution2d(net, 512, scope='conv4_2')
+    net = layers.convolution2d(net, 512, scope='conv4_3')
+    #net = layers.max_pool2d(net, 2, 2, scope='pool4')
+    up_shape = tf.shape(net, out_type=tf.int64)
+    net, argmax = tf.nn.max_pool_with_argmax(net, ksize, stride,
+                  padding='SAME', name='pool4')
+    argmax_data.append([argmax, up_shape])
+    enc_data.append(net)
+    net = layers.convolution2d(net, 512, scope='conv5_1')
+    net = layers.convolution2d(net, 512, scope='conv5_2')
+    net = layers.convolution2d(net, 512, scope='conv5_3')
+    vgg_code = net
+    #net = layers.max_pool2d(net, 2, 2, scope='pool5')
+    #net = layers.convolution2d(net, 16, scope='conv_down')
+    up_shape = tf.shape(net, out_type=tf.int64)
+    net, argmax = tf.nn.max_pool_with_argmax(net, ksize, stride,
+                  padding='SAME', name='pool5')
+    argmax_data.append([argmax, up_shape])
 
 
   with tf.variable_scope(HEAD_PREFIX):
     dec_data = decode(net, argmax_data, bn_params)
-    unsup_weight = 1
+    #unsup_weight = 1
+    #unsup_weight = 0.4
     unsup_loss = tf.to_float(0)
     #l2_mid_wgt = 0.2 batch norm!
     l2_mid_wgt = 0.0
     l2_wgt = 1.0
+    #l2_wgt = 0.1
     weights = [l2_wgt]
     weights += [l2_mid_wgt] * 4
     #for i, enc in enumerate(enc_data):
     #  unsup_loss += weights[i] * l2_loss(enc, dec_data[-1-i])
     unsup_loss += l2_wgt * l2_loss(enc_data[0], dec_data[-1])
-    logits = net
+    #logits = net
 
-    #with arg_scope([layers.convolution2d],
-    #      padding='SAME', activation_fn=tf.nn.relu,
-    #      normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
-    #      weights_initializer=init_func,
-    #      weights_regularizer=layers.l2_regularizer(weight_decay)):
-    #  net = layers.convolution2d(net, 512, kernel_size=5, rate=2, scope='conv1')
-    #  net = layers.convolution2d(net, 512, kernel_size=1, scope='conv2') # faster
-    #  #l = tf.Print(l, [tf.shape(image)], message='IMG SHAPE = ')
-    #  logits = layers.convolution2d(net, FLAGS.num_classes, kernel_size=1,
-    #        activation_fn=None, weights_initializer=init_func, normalizer_fn=None,
-    #        scope='logits')
-    #  print(input_shape)
-    #  #global resize_height, resize_width
-    #  #height = tf.Print(height, [height, width], message='SHAPE = ')
-    #  #logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
-    #  #logits = tf.image.resize_bilinear(logits, [resize_height, resize_width],
+    with arg_scope([layers.convolution2d],
+          padding='SAME', activation_fn=tf.nn.relu,
+          normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
+          weights_initializer=init_func,
+          weights_regularizer=layers.l2_regularizer(weight_decay)):
+      net = layers.convolution2d(vgg_code, 512, kernel_size=5, rate=2, scope='conv1')
+      net = layers.convolution2d(net, 512, kernel_size=1, scope='conv2') # faster
+      #l = tf.Print(l, [tf.shape(image)], message='IMG SHAPE = ')
+      logits = layers.convolution2d(net, FLAGS.num_classes, kernel_size=1,
+            activation_fn=None, weights_initializer=init_func, normalizer_fn=None,
+            scope='logits')
+      #global resize_height, resize_width
+      #height = tf.Print(height, [height, width], message='SHAPE = ')
+      #logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
+      #logits = tf.image.resize_bilinear(logits, [resize_height, resize_width],
     input_shape = tf.shape(x)
     height = input_shape[1]
     width = input_shape[2]
@@ -443,7 +444,8 @@ def build(dataset, is_training, reuse=False):
     #return [total_loss], init_op, init_feed
     return [total_loss, image, rec_img], init_op, init_feed
   else:
-    return [total_loss, image, rec_img, img_names]
+    #return [total_loss, logits, labels, image, rec_img, img_names]
+    return [total_loss, logits, labels, img_names]
 
 def minimize(opts, loss, global_step):
   all_vars = tf.trainable_variables()
@@ -486,9 +488,9 @@ def minimize(opts, loss, global_step):
 
 def loss(logits, labels, weights, is_training=True):
   # TODO
+  #loss_val = 0.0
+  loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=100)
   #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=10)
-  #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=100)
-  loss_val = 0.0
   #loss_val = losses.flip_xent_loss(logits, labels, weights, max_weight=10)
   #loss_tf = tf.contrib.losses.softmax_cross_entropy()
   #loss_val = losses.weighted_cross_entropy_loss(logits, labels, weights)

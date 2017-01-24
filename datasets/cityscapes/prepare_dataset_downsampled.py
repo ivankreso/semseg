@@ -12,8 +12,6 @@ from tqdm import trange
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('data_dir',
     '/home/kivan/datasets/Cityscapes/2048x1024/', 'Dataset dir')
-tf.app.flags.DEFINE_integer('img_width', 640, '')
-tf.app.flags.DEFINE_integer('img_height', 288, '')
 #tf.app.flags.DEFINE_integer('img_width', 320, '')
 #tf.app.flags.DEFINE_integer('img_height', 144, '')
 #tf.app.flags.DEFINE_integer('img_width', 1024, '')
@@ -21,8 +19,16 @@ tf.app.flags.DEFINE_integer('img_height', 288, '')
 # leave out the car hood
 tf.app.flags.DEFINE_integer('cx_start', 0, '')
 tf.app.flags.DEFINE_integer('cx_end', 2048, '')
-tf.app.flags.DEFINE_integer('cy_start', 0, '')
+#tf.app.flags.DEFINE_integer('cy_start', 0, '')
+#tf.app.flags.DEFINE_integer('cy_end', 900, '')
+#tf.app.flags.DEFINE_integer('img_width', 640, '')
+#tf.app.flags.DEFINE_integer('img_height', 288, '')
+
+tf.app.flags.DEFINE_integer('cy_start', 30, '')
 tf.app.flags.DEFINE_integer('cy_end', 900, '')
+tf.app.flags.DEFINE_integer('img_width', 640, '')
+tf.app.flags.DEFINE_integer('img_height', 272, '')
+
 #tf.app.flags.DEFINE_integer('img_width', 640, '')
 #tf.app.flags.DEFINE_integer('cx_start', 120, '')
 #tf.app.flags.DEFINE_integer('img_height', 298, '')
