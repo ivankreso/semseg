@@ -13,7 +13,8 @@ from tensorflow.contrib.framework import arg_scope
 import losses
 import eval_helper
 #import datasets.reader_rgbd_depth as reader
-import datasets.reader as reader
+import datasets.reader_rgbd as reader
+#import datasets.reader as reader
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -24,18 +25,10 @@ MEAN_BGR = [75.08929598, 85.01498926, 75.2051479]
 
 
 def evaluate(name, sess, epoch_num, run_ops, dataset, data):
-  #TODO iIOU
   loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation(
-      sess, epoch_num, run_ops, dataset.num_examples())
+      sess, epoch_num, run_ops, num_examples(dataset))
   if iou > data['best_iou'][0]:
     data['best_iou'] = [iou, epoch_num]
-  data['iou'] += [iou]
-  data['acc'] += [accuracy]
-  data['loss'] += [loss_val]
-
-def plot_results(train_data, valid_data):
-  eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'),
-                                     train_data, valid_data)
 
 def print_results(data):
   print('Best validation IOU = %.2f (epoch %d)' % tuple(data['best_iou']))
@@ -46,17 +39,16 @@ def init_eval_data():
   train_data['lr'] = []
   train_data['loss'] = []
   train_data['iou'] = []
-  train_data['acc'] = []
+  train_data['accuracy'] = []
   train_data['best_iou'] = [0, 0]
   valid_data['best_iou'] = [0, 0]
   valid_data['loss'] = []
   valid_data['iou'] = []
-  valid_data['acc'] = []
+  valid_data['accuracy'] = []
   return train_data, valid_data
 
-
-def normalize_input(img):
-  return img - MEAN_BGR
+def normalize_input(img, depth):
+  return img - MEAN_BGR, depth - 33.0
   #"""Changes RGB [0,1] valued image to BGR [0,255] with mean subtracted."""
   #with tf.name_scope('input'), tf.device('/cpu:0'):
   #  #rgb -= MEAN_RGB
@@ -120,7 +112,7 @@ def upsample(net, name):
     net = tf.contrib.layers.convolution2d_transpose(net, num_filters, kernel_size=3, stride=2)
     return net
 
-def _build(image, is_training):
+def _build(image, depth, is_training):
   bn_params['is_training'] = is_training
   weight_decay = 1e-4
   #init_func = layers.variance_scaling_initializer(mode='FAN_OUT')
@@ -143,6 +135,8 @@ def _build(image, is_training):
       weights_initializer=init_func, biases_initializer=None,
       weights_regularizer=layers.l2_regularizer(weight_decay)):
     net = layers.convolution2d(image, 48, 3, scope='conv0')
+    #depth = tf.Print(depth, [tf.reduce_mean(depth)], message='depth = ')
+    net = tf.concat(3, [depth, net])
     block_outputs = []
     for i, size in enumerate(block_sizes):
       print(i, size)
@@ -153,41 +147,40 @@ def _build(image, is_training):
       print(net)
       if i < len(block_sizes) - 1:
         net = downsample(net, 'block'+str(i)+'_downsample', is_training)
-  logits_mid = layers.convolution2d(net, FLAGS.num_classes, 1, activation_fn=None,
-      biases_initializer=tf.zeros_initializer, scope='logits_middle')
-  logits_mid = tf.image.resize_bilinear(logits_mid, [FLAGS.img_height, FLAGS.img_width],
-                                    name='resize_logits_middle')
-  return logits_mid, None
+    #logits_mid = layers.convolution2d(net, FLAGS.num_classes, 1,
+    #    biases_initializer=tf.zeros_initializer, scope='logits_middle')
+    #logits_mid = tf.image.resize_bilinear(logits_mid, [FLAGS.img_height, FLAGS.img_width],
+    #                                  name='resize_logits_middle')
 
-  #  #net = tf.nn.relu(net)
-  #  #num_filters = net.get_shape().as_list()[3]
-  #  #net = layers.convolution2d(net, num_filters, kernel_size=1)
+    #net = tf.nn.relu(net)
+    #num_filters = net.get_shape().as_list()[3]
+    #net = layers.convolution2d(net, num_filters, kernel_size=1)
 
-  #  for i, size in reversed(list(enumerate(block_sizes[:-1]))):
-  #    print(i, size)
-  #    net = upsample(net, 'block'+str(i)+'_back_upsample')
-  #    print(block_outputs[i])
-  #    net = tf.concat(3, [block_outputs[i], net])
-  #    print(net)
-  #    net = dense_block(net, size, r, 'block'+str(i)+'_back', is_training)
-  #    print(net)
-  #  logits = layers.convolution2d(net, FLAGS.num_classes, 1,
-  #      biases_initializer=tf.zeros_initializer, scope='logits')
-  #  #logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
-  #  #                                  name='resize_logits')
-  #return logits, None
+    for i, size in reversed(list(enumerate(block_sizes[:-1]))):
+      print(i, size)
+      net = upsample(net, 'block'+str(i)+'_back_upsample')
+      print(block_outputs[i])
+      net = tf.concat(3, [block_outputs[i], net])
+      print(net)
+      net = dense_block(net, size, r, 'block'+str(i)+'_back', is_training)
+      print(net)
+    logits = layers.convolution2d(net, FLAGS.num_classes, 1,
+        biases_initializer=tf.zeros_initializer, scope='logits')
+    #logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
+    #                                  name='resize_logits')
+  return logits, None
 
 
 def build(dataset, is_training, reuse=False):
   # Get images and labels.
-  x, labels, weights, depth, img_names = reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
-  x = normalize_input(x)
+  x, labels, weights, depth, img_names = reader.inputs(dataset, shuffle=is_training, num_epochs=FLAGS.max_epochs)
+  x, depth = normalize_input(x, depth)
 
   if reuse:
     tf.get_variable_scope().reuse_variables()
 
   #logits = _build(x, is_training)
-  logits, logits_mid = _build(x, is_training)
+  logits, logits_mid = _build(x, depth, is_training)
   total_loss = loss(logits, logits_mid, labels, weights, is_training)
 
   #all_vars = tf.contrib.framework.get_variables()
@@ -202,7 +195,7 @@ def build(dataset, is_training, reuse=False):
 
 def loss(logits, logits_mid, labels, weights, is_training=True):
 #def loss(logits, labels, weights, is_training=True):
-  xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights)
+  xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=50)
   #xent_loss += losses.weighted_cross_entropy_loss(logits_mid, labels, weights)
   #xent_loss /= 2
 
@@ -226,16 +219,6 @@ def loss(logits, logits_mid, labels, weights, is_training=True):
 
   return total_loss
 
-def minimize(opts, loss, global_step):
-  grads = opts[0].compute_gradients(loss)
-  train_op = opts[0].apply_gradients(grads, global_step=global_step)
-  return train_op
-
-def train_step(sess, run_ops):
-  return sess.run(run_ops)
-
-def num_batches(dataset):
-  return reader.num_examples(dataset)
 
 def num_examples(dataset):
   return reader.num_examples(dataset)

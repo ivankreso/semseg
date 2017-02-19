@@ -36,63 +36,16 @@ def train(model, train_dataset, valid_dataset):
     global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0),
                                   trainable=False)
 
-    # Calculate the learning rate schedule.
-    #num_batches_per_epoch = (model.num_examples(train_dataset) / FLAGS.batch_size)
-    num_batches_per_epoch = model.num_batches(train_dataset)
-    decay_steps = int(num_batches_per_epoch * FLAGS.num_epochs_per_decay)
-    # Decay the learning rate exponentially based on the number of steps.
-    lr = tf.train.exponential_decay(FLAGS.initial_learning_rate, global_step, decay_steps,
-                                    FLAGS.learning_rate_decay_factor, staircase=True)
-    lr2 = tf.train.exponential_decay(10*FLAGS.initial_learning_rate, global_step, decay_steps,
-                                    FLAGS.learning_rate_decay_factor, staircase=True)
-
     # Build a Graph that computes the logits predictions from the inference model.
     train_ops, init_op, init_feed = model.build(train_dataset, is_training=True)
     valid_ops = model.build(valid_dataset, is_training=False, reuse=True)
     loss = train_ops[0]
 
-    # Add a summary to track the learning rate.
-    #tf.scalar_summary('learning_rate', lr)
-    tf.summary.scalar('learning_rate', lr)
-
-    print('Using optimizer:', FLAGS.optimizer)
-    opts = []
-    if FLAGS.optimizer == 'Adam':
-      opts += [tf.train.AdamOptimizer(lr)]
-      opts += [tf.train.AdamOptimizer(lr2)]
-    elif FLAGS.optimizer == 'Momentum':
-      opt = tf.train.MomentumOptimizer(lr, FLAGS.momentum)
-      #opt = tf.train.GradientDescentOptimizer(lr)
-    elif FLAGS.optimizer == 'RMSprop':
-      opt = tf.train.RMSPropOptimizer(lr)
-    else:
-      raise ValueError()
-
-    train_op = model.minimize(opts, loss, global_step)
+    num_batches = model.num_batches(train_dataset)
+    train_op = model.minimize(loss, global_step, num_batches)
 
     #grads = opt.compute_gradients(loss)
     #train_op = opt.apply_gradients(grads, global_step=global_step)
-
-
-
-    # Add histograms for trainable variables.
-    #for var in tf.trainable_variables():
-    #  tf.histogram_summary(var.op.name, var)
-    ## Add histograms for gradients.
-    #grad_tensors = []
-    #for grad, var in grads:
-    #  grad_tensors += [grad]
-    #  #print(var)
-    #  if grad is not None:
-    #    tf.histogram_summary(var.op.name + '/gradients', grad)
-    ##grad = grads[-2][0]
-    ##print(grad)
-
-    # Track the moving averages of all trainable variables.
-    #variable_averages = tf.train.ExponentialMovingAverage(
-    #    FLAGS.moving_average_decay, global_step)
-    #variables_averages_op = variable_averages.apply(tf.trainable_variables())
-
 
     # Create a saver.
     saver = tf.train.Saver(tf.global_variables(), max_to_keep=FLAGS.max_epochs)
@@ -133,29 +86,27 @@ def train(model, train_dataset, valid_dataset):
     for epoch_num in range(1, FLAGS.max_epochs + 1):
       train_loss_sum = 0
       print('\ntensorboard --logdir=' + FLAGS.train_dir + '\n')
-      train_data['lr'] += [lr.eval(session=sess)]
+      train_data['lr'] += [model.lr.eval(session=sess)]
       num_batches = model.num_batches(train_dataset) // FLAGS.num_validations_per_epoch
       for step in range(num_batches):
         start_time = time.time()
-        feed_dict = model.get_train_feed()
         run_ops = train_ops + [train_op, global_step]
         #run_ops = [train_op, loss, logits, labels, draw_data, img_name, global_step]
         if False:
         #if step % 400 == 0:
           run_ops += [summary_op, loss_avg_train]
           #run_ops += [summary_op]
-          ret_val = sess.run(run_ops, feed_dict=feed_dict)
           loss_val = ret_val[0]
           train_loss_val = ret_val[-1]
           summary_str = ret_val[-2]
           global_step_val = ret_val[-3]
           summary_writer.add_summary(summary_str, global_step_val)
         else:
-          ret_val = sess.run(run_ops, feed_dict=feed_dict)
-          #ret_val = sess.run(run_ops)
+          #ret_val = sess.run(run_ops, feed_dict=feed_dict)
+          ret_val = model.train_step(sess, run_ops)
           loss_val = ret_val[0]
-          if step % 100 == 0:
-            model.evaluate_output(ret_val, step)
+          #if step % 100 == 0:
+          #  model.evaluate_output(ret_val, step)
           #train_helper.print_grad_stats(grads_val, grad_tensors)
           #run_metadata = tf.RunMetadata()
           #ret_val = sess.run(run_ops,

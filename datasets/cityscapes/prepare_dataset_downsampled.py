@@ -26,8 +26,10 @@ tf.app.flags.DEFINE_integer('cx_end', 2048, '')
 
 tf.app.flags.DEFINE_integer('cy_start', 30, '')
 tf.app.flags.DEFINE_integer('cy_end', 900, '')
-tf.app.flags.DEFINE_integer('img_width', 640, '')
-tf.app.flags.DEFINE_integer('img_height', 272, '')
+#tf.app.flags.DEFINE_integer('img_width', 640, '')
+#tf.app.flags.DEFINE_integer('img_height', 272, '')
+tf.app.flags.DEFINE_integer('img_width', 1024, '')
+tf.app.flags.DEFINE_integer('img_height', 432, '')
 
 #tf.app.flags.DEFINE_integer('img_width', 640, '')
 #tf.app.flags.DEFINE_integer('cx_start', 120, '')

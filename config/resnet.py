@@ -12,7 +12,8 @@ import train_helper
 #MODEL_PATH = './models/resnet/resnet_seg_depth.py'
 
 #MODEL_PATH = './models/resnet/resnet_dilated.py'
-MODEL_PATH = './models/resnet/resnet_flip.py'
+#MODEL_PATH = './models/resnet/resnet_flip.py'
+MODEL_PATH = './models/resnet/ladder.py'
 SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
                         train_helper.get_time_string())
 
@@ -46,7 +47,7 @@ tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 15, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 10, '')
 #tf.app.flags.DEFINE_integer('batch_size', 2, '')
-tf.app.flags.DEFINE_integer('batch_size', 2, '')
+tf.app.flags.DEFINE_integer('batch_size', 1, '')
 tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
 
 #tf.app.flags.DEFINE_string('optimizer', 'Momentum', '')

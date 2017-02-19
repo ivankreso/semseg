@@ -70,46 +70,41 @@ bn_params = {
   'is_training': True
 }
 
-def layer(net, num_filters, name, is_training):
+def layer(net, num_filters, name):
   with tf.variable_scope(name):
     net = tf.contrib.layers.batch_norm(net, **bn_params)
     net = tf.nn.relu(net)
     net = layers.convolution2d(net, num_filters, kernel_size=3)
-    #if is_training: 
-      #net = tf.nn.dropout(net, keep_prob=0.8)
+    net = tf.nn.dropout(net, keep_prob=0.8)
   return net
 
-def dense_block(net, size, r, name, is_training):
+def dense_block(net, size, r, name):
   with tf.variable_scope(name):
     outputs = []
     for i in range(size):
       if i < size - 1:
         x = net
-        net = layer(net, r, 'layer'+str(i), is_training)
+        net = layer(net, r, 'layer'+str(i))
         outputs += [net]
         net = tf.concat(3, [x, net])
       else:
-        net = layer(net, r, 'layer'+str(i), is_training)
+        net = layer(net, r, 'layer'+str(i))
         outputs += [net]
     net = tf.concat(3, outputs)
   return net
 
-def downsample(net, name, is_training):
+def downsample(net, name):
   with tf.variable_scope(name):
     net = tf.contrib.layers.batch_norm(net)
     net = tf.nn.relu(net)
     num_filters = net.get_shape().as_list()[3]
     net = layers.convolution2d(net, num_filters, kernel_size=1)
-    #if is_training:
-    #  net = tf.nn.dropout(net, keep_prob=0.8)
+    net = tf.nn.dropout(net, keep_prob=0.8)
     net = layers.max_pool2d(net, 2, stride=2, padding='SAME')
   return net
 
-def upsample(net, name):
-  with tf.variable_scope(name):
-    num_filters = net.get_shape().as_list()[3]
-    net = tf.contrib.layers.convolution2d_transpose(net, num_filters, kernel_size=3, stride=2)
-    return net
+def transition_up():
+  pass
 
 def _build(image, is_training):
   bn_params['is_training'] = is_training
@@ -119,7 +114,8 @@ def _build(image, is_training):
 
   cfg = {
     #5: [4,5,7,10,12,15],
-    5: [2,3,4,5,6,8],
+    #5: [2,3,4,5,6,7],
+    5: [2,2,3,5,6,6],
     #5: [3,3,3,3,3,3],
     #5: [3,3,3],
     #5: [2,2],
@@ -128,44 +124,25 @@ def _build(image, is_training):
   r = 16
   #r = 12
   
-  with arg_scope([layers.convolution2d, layers.convolution2d_transpose],
+  with arg_scope([layers.convolution2d],
       stride=1, padding='SAME', activation_fn=None,
       normalizer_fn=None, normalizer_params=None,
       weights_initializer=init_func, biases_initializer=None,
       weights_regularizer=layers.l2_regularizer(weight_decay)):
     net = layers.convolution2d(image, 48, 3, scope='conv0')
-    block_outputs = []
     for i, size in enumerate(block_sizes):
       print(i, size)
       x = net
-      net = dense_block(net, size, r, 'block'+str(i), is_training)
+      net = dense_block(net, block_sizes[i], r, 'block'+str(i))
       net = tf.concat(3, [x, net])
-      block_outputs += [net]
-      print(net)
       if i < len(block_sizes) - 1:
-        net = downsample(net, 'block'+str(i)+'_downsample', is_training)
-    #logits_mid = layers.convolution2d(net, FLAGS.num_classes, 1,
-    #    biases_initializer=tf.zeros_initializer, scope='logits_middle')
-    #logits_mid = tf.image.resize_bilinear(logits_mid, [FLAGS.img_height, FLAGS.img_width],
-    #                                  name='resize_logits_middle')
-
-    #net = tf.nn.relu(net)
-    #num_filters = net.get_shape().as_list()[3]
-    #net = layers.convolution2d(net, num_filters, kernel_size=1)
-
-    for i, size in reversed(list(enumerate(block_sizes[:-1]))):
-      print(i, size)
-      net = upsample(net, 'block'+str(i)+'_back_upsample')
-      print(block_outputs[i])
-      net = tf.concat(3, [block_outputs[i], net])
-      print(net)
-      net = dense_block(net, size, r, 'block'+str(i)+'_back', is_training)
+        net = downsample(net, 'block'+str(i)+'_downsample')
       print(net)
     logits = layers.convolution2d(net, FLAGS.num_classes, 1,
         biases_initializer=tf.zeros_initializer, scope='logits')
-    #logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
-    #                                  name='resize_logits')
-  return logits, None
+    logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
+                                      name='resize_logits')
+  return logits
 
 
 def build(dataset, is_training, reuse=False):
@@ -176,9 +153,8 @@ def build(dataset, is_training, reuse=False):
   if reuse:
     tf.get_variable_scope().reuse_variables()
 
-  #logits = _build(x, is_training)
-  logits, logits_mid = _build(x, is_training)
-  total_loss = loss(logits, logits_mid, labels, weights, is_training)
+  logits = _build(x, is_training)
+  total_loss = loss(logits, labels, weights, is_training)
 
   #all_vars = tf.contrib.framework.get_variables()
   #for v in all_vars:
@@ -190,15 +166,9 @@ def build(dataset, is_training, reuse=False):
     return [total_loss, logits, labels, img_names]
 
 
-def loss(logits, logits_mid, labels, weights, is_training=True):
-#def loss(logits, labels, weights, is_training=True):
-  xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights)
-  #xent_loss += losses.weighted_cross_entropy_loss(logits_mid, labels, weights)
-  #xent_loss /= 2
-
-  #xent_loss = losses.weighted_cross_entropy_loss(logits, labels)
-  #xent_loss += losses.weighted_cross_entropy_loss(logits_mid, labels)
-
+def loss(logits, labels, weights, is_training=True):
+  #xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights)
+  xent_loss = losses.weighted_cross_entropy_loss(logits, labels)
   #loss_tf = tf.contrib.losses.softmax_cross_entropy()
   #loss_val = losses.weighted_hinge_loss(logits, labels, weights, num_labels)
   #loss_val = losses.flip_xent_loss(logits, labels, weights, num_labels)

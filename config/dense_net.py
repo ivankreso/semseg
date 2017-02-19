@@ -4,7 +4,9 @@ import train_helper
 
 #MODEL_PATH = './models/dense_net/dense_net.py'
 #MODEL_PATH = './models/dense_net/dense_net_full.py'
-MODEL_PATH = './models/dense_net/dense_net_depth.py'
+#MODEL_PATH = './models/dense_net/dense_net_depth.py'
+#MODEL_PATH = './models/dense_net/dense_net_orig.py'
+MODEL_PATH = './models/dense_net/dense_net_ladder.py'
 SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
                         train_helper.get_time_string())
 
@@ -17,7 +19,7 @@ SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
 IMG_WIDTH = 640
 IMG_HEIGHT = 288
 #IMG_WIDTH = 1024
-#IMG_HEIGHT = 448
+#IMG_HEIGHT = 432
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
                            '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 #DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
@@ -31,8 +33,8 @@ tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
 tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 1e-4, '')
 # TODO better 4?
-#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
-tf.app.flags.DEFINE_integer('num_epochs_per_decay', 13, '')
+tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 13, '')
 #tf.app.flags.DEFINE_integer('batch_size', 1, '')
 tf.app.flags.DEFINE_integer('batch_size', 2, '')
 tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')

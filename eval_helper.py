@@ -23,7 +23,10 @@ def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=
   for step in range(num_examples):
     start_time = time.time()
     if len(run_ops) == 4:
-      loss_val, logits, labels, img_names = sess.run(run_ops, feed_dict=get_feed_dict())
+      if get_feed_dict != None:
+        loss_val, logits, labels, img_names = sess.run(run_ops, feed_dict=get_feed_dict())
+      else:
+        loss_val, logits, labels, img_names = sess.run(run_ops)
     elif len(run_ops) == 5:
       loss_val, logits, labels, img_names, logits_mid = sess.run(run_ops)
     else:

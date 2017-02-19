@@ -18,10 +18,13 @@ import datasets.reader_rgbd as reader
 
 FLAGS = tf.app.flags.FLAGS
 
-MODEL_DEPTH = 50
 #MEAN_RGB = [75.2051479, 85.01498926, 75.08929598]
 MEAN_BGR = [75.08929598, 85.01498926, 75.2051479]
 #MEAN_BGR = [103.939, 116.779, 123.68]
+
+weight_decay = 1e-4
+#init_func = layers.variance_scaling_initializer(mode='FAN_OUT')
+init_func = layers.variance_scaling_initializer()
 
 def evaluate(name, sess, epoch_num, run_ops, dataset, data):
   #TODO iIOU
@@ -79,117 +82,125 @@ bn_params = {
   'is_training': True
 }
 
-def layer(net, num_filters, name, is_training):
+def build_refinement_module(top_layer, skip_data):
+  skip_layer = skip_data[0]
+  size_bottom = skip_data[1]
+  skip_name = skip_data[2]
+
+  top_height = top_layer.get_shape()[1].value
+  top_width = top_layer.get_shape()[2].value
+  skip_height = skip_layer.get_shape()[1].value
+  skip_width = skip_layer.get_shape()[2].value
+  size_top = top_layer.get_shape()[3].value
+
+  if top_height != skip_height or top_width != skip_width:
+    assert(2*top_height == skip_height)
+    top_layer = tf.image.resize_bilinear(top_layer, [skip_height, skip_width],
+                                         name=skip_name + '_refine_upsample')
+
+  with arg_scope([layers.convolution2d],
+    padding='SAME', activation_fn=tf.nn.relu,
+    normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
+    weights_initializer=init_func,
+    weights_regularizer=layers.l2_regularizer(weight_decay)):
+    print(skip_name, top_layer, skip_layer)
+    skip_layer = tf.nn.relu(skip_layer)
+    skip_layer = layers.convolution2d(skip_layer, size_top, kernel_size=3,
+                                      scope=skip_name+'_refine_prep')
+    net = tf.concat([top_layer, skip_layer], 3)
+    net = layers.convolution2d(net, size_bottom, kernel_size=3,
+                               scope=skip_name+'_refine_fuse')
+  return net
+
+def BNReluConv(net, num_filters, name, is_training, k=3, rate=1):
   with tf.variable_scope(name):
     net = tf.contrib.layers.batch_norm(net, **bn_params)
     net = tf.nn.relu(net)
-    net = layers.convolution2d(net, num_filters, kernel_size=3)
+    net = layers.conv2d(net, num_filters, kernel_size=k, rate=rate)
+  return net
+
+def layer(net, num_filters, name, is_training, k=3):
+  with tf.variable_scope(name):
+    net = tf.contrib.layers.batch_norm(net, **bn_params)
+    net = tf.nn.relu(net)
+    net = layers.conv2d(net, 4*num_filters, kernel_size=1)
+    net = tf.contrib.layers.batch_norm(net, **bn_params)
+    net = tf.nn.relu(net)
+    net = layers.conv2d(net, num_filters, kernel_size=k)
     #if is_training: 
       #net = tf.nn.dropout(net, keep_prob=0.8)
   return net
 
-def dense_block(net, size, r, name, is_training):
+def dense_block(net, size, k, name, is_training):
   with tf.variable_scope(name):
     outputs = []
     for i in range(size):
-      if i < size - 1:
-        x = net
-        net = layer(net, r, 'layer'+str(i), is_training)
-        outputs += [net]
-        net = tf.concat([x, net], 3)
-      else:
-        net = layer(net, r, 'layer'+str(i), is_training)
-        outputs += [net]
-    net = tf.concat(outputs, 3)
+      x = net
+      net = layer(net, k, 'layer'+str(i), is_training)
+      net = tf.concat([x, net], 3)
+  print(net)
   return net
 
-def downsample(net, name, is_training):
+def transition(net, compression, name):
   with tf.variable_scope(name):
     net = tf.contrib.layers.batch_norm(net)
     net = tf.nn.relu(net)
     num_filters = net.get_shape().as_list()[3]
+    num_filters = int(round(num_filters*compression))
     net = layers.convolution2d(net, num_filters, kernel_size=1)
-    #if is_training:
-    #  net = tf.nn.dropout(net, keep_prob=0.8)
     net = layers.max_pool2d(net, 2, stride=2, padding='SAME')
+    #net = layers.avg_pool2d(net, 2, stride=2, padding='SAME')
+  print(net)
   return net
-
-def upsample(net, shape, name):
-  with tf.variable_scope(name):
-    #return tf.image.resize_nearest_neighbor(net, shape[1:3], name='resize_logits_middle')
-    return tf.image.resize_bilinear(net, shape[1:3], name='resize_logits_biliner')
-#def upsample(net, name):
-#  with tf.variable_scope(name):
-#    num_filters = net.get_shape().as_list()[3]
-#    net = tf.contrib.layers.convolution2d_transpose(net, num_filters, kernel_size=3, stride=2)
-#    return net
 
 def _build(image, depth, is_training):
   bn_params['is_training'] = is_training
-  weight_decay = 1e-4
-  #init_func = layers.variance_scaling_initializer(mode='FAN_OUT')
-  init_func = layers.variance_scaling_initializer()
-
-  cfg = {
-    #5: [4,5,7,10,12,15],
-    5: [2,3,4,5,6,8],
-    #5: [3,3,3,3,3,3],
-    #5: [3,3,3],
-    #5: [2,2],
-  }
-  block_sizes = [2,3,4,5,6,7]
-  #block_sizes_back = [4,3,3,2,2]
-  block_sizes_back = [2,2,2,2,2]
-  #block_sizes_back = [4,4,4,4,4]
-  r = 16
-  r_up = 32
-  #r_up = 16
-  #r = 12
+  block_sizes = [6,12,24,16]
+  k = 32
+  compression = 0.5
   
   with arg_scope([layers.convolution2d, layers.convolution2d_transpose],
       stride=1, padding='SAME', activation_fn=None,
       normalizer_fn=None, normalizer_params=None,
       weights_initializer=init_func, biases_initializer=None,
       weights_regularizer=layers.l2_regularizer(weight_decay)):
-    net = layers.convolution2d(image, 48, 3, scope='conv0')
-    #depth = tf.Print(depth, [tf.reduce_mean(depth)], message='depth = ')
+    net = layers.convolution2d(image, 2*k, 7, stride=2, scope='conv0')
+    #net = layers.max_pool2d(net, 3, stride=2, padding='SAME', scope='pool0')
+    #net = layers.max_pool2d(net, 2, stride=2, padding='SAME', scope='pool0')
+    #net = layers.convolution2d(image, 2*k, 3, scope='conv0')
+    #net = dense_block(net, 2, k, 'block0', is_training)
+    #net = transition(net, compression, 'pool0')
+
+    depth = tf.image.resize_nearest_neighbor(depth, tf.shape(net)[1:3],
+              name='resize_depth')
     net = tf.concat([depth, net], 3)
-    block_outputs = []
-    for i, size in enumerate(block_sizes):
-      print(i, size)
-      x = net
-      net = dense_block(net, size, r, 'block'+str(i), is_training)
-      net = tf.concat([x, net], 3)
-      print(net)
-      if i < len(block_sizes) - 1:
-        block_outputs += [net]
-        net = downsample(net, 'block'+str(i)+'_downsample', is_training)
-    #logits_mid = layers.convolution2d(net, FLAGS.num_classes, 1,
-    #    biases_initializer=tf.zeros_initializer, scope='logits_middle')
-    #logits_mid = tf.image.resize_bilinear(logits_mid, [FLAGS.img_height, FLAGS.img_width],
-    #                                  name='resize_logits_middle')
+    skip_layers = []
+    km = 256
+    net = dense_block(net, block_sizes[0], k, 'block1', is_training)
+    skip_layers.append([net, km//2, 'block1'])
+    net = transition(net, compression, 'pool1')
+    net = dense_block(net, block_sizes[1], k, 'block2', is_training)
+    skip_layers.append([net, km//2, 'block2'])
+    net = transition(net, compression, 'pool2')
+    net = dense_block(net, block_sizes[2], k, 'block3', is_training)
+    skip_layers.append([net, km, 'block3'])
+    net = transition(net, compression, 'pool3')
+    net = dense_block(net, block_sizes[3], k, 'block4', is_training)
+    skip_layers.append([net, km, 'block4'])
+    net = transition(net, compression, 'pool4')
+    print(net)
 
-    # TODO add 5x5
-    #net = tf.nn.relu(net)
-    #num_filters = net.get_shape().as_list()[3]
-    #net = layers.convolution2d(net, num_filters, kernel_size=1)
+  with tf.variable_scope('head'):
+    #net = layers.conv2d(net, 512, kernel_size=5, rate=2, scope='head_conv1')
+    net = BNReluConv(net, 512, 'conv1', is_training, k=5, rate=2)
+  for skip_layer in reversed(skip_layers):
+    net = build_refinement_module(net, skip_layer)
+    print(net)
 
-    #for i, size in reversed(list(enumerate(block_sizes[:-1]))):
-    for i, size in enumerate(block_sizes_back):
-      print(i, size)
-      #net = upsample(net, 'block'+str(i)+'_back_upsample')
-      #net = upsample(net, tf.shape(block_outputs[i]), 'block'+str(i)+'_back_upsample')
-      skip_input = block_outputs[-1-i]
-      net = upsample(net, tf.shape(skip_input), 'block'+str(i)+'_back_upsample')
-      print(skip_input)
-      net = tf.concat([skip_input, net], 3)
-      print(net)
-      net = dense_block(net, size, r_up, 'block'+str(i)+'_back', is_training)
-      print(net)
   logits = layers.conv2d(net, FLAGS.num_classes, 1, activation_fn=None, scope='logits')
-    #logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
-    #                                  name='resize_logits')
-  return logits, None
+  logits = tf.image.resize_bilinear(logits, [FLAGS.img_height, FLAGS.img_width],
+                                    name='resize_logits')
+  return logits
 
 
 def build(dataset, is_training, reuse=False):
@@ -197,8 +208,8 @@ def build(dataset, is_training, reuse=False):
     x, labels, weights, depth, img_names = reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
     x, depth = normalize_input(x, depth)
 
-    logits, logits_mid = _build(x, depth, is_training)
-    total_loss = _loss(logits, logits_mid, labels, weights, is_training)
+    logits = _build(x, depth, is_training)
+    total_loss = _loss(logits, labels, weights, is_training)
 
     if is_training:
       return [total_loss], None, None
@@ -206,20 +217,8 @@ def build(dataset, is_training, reuse=False):
       return [total_loss, logits, labels, img_names]
 
 
-def _loss(logits, logits_mid, labels, weights, is_training=True):
-#def loss(logits, labels, weights, is_training=True):
+def _loss(logits, labels, weights, is_training=True):
   xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=10)
-  #xent_loss += losses.weighted_cross_entropy_loss(logits_mid, labels, weights)
-  #xent_loss /= 2
-
-  #xent_loss = losses.weighted_cross_entropy_loss(logits, labels)
-  #xent_loss += losses.weighted_cross_entropy_loss(logits_mid, labels)
-
-  #loss_tf = tf.contrib.losses.softmax_cross_entropy()
-  #loss_val = losses.weighted_hinge_loss(logits, labels, weights, num_labels)
-  #loss_val = losses.flip_xent_loss(logits, labels, weights, num_labels)
-  #loss_val = losses.flip_xent_loss_symmetric(logits, labels, weights, num_labels)
-  #all_losses = [depth_loss, xent_loss]
   all_losses = [xent_loss]
 
   # get losses + regularization
@@ -233,7 +232,7 @@ def _loss(logits, logits_mid, labels, weights, is_training=True):
   return total_loss
 
 def minimize(loss, global_step, num_batches):
-  decay_steps = int(num_batches * FLAGS.num_epochs_per_decay) * 2
+  decay_steps = int(num_batches * FLAGS.num_epochs_per_decay)
   # Decay the learning rate exponentially based on the number of steps.
   global lr
   lr = tf.train.exponential_decay(FLAGS.initial_learning_rate, global_step, decay_steps,
@@ -243,8 +242,8 @@ def minimize(loss, global_step, num_batches):
   opt = tf.train.AdamOptimizer(lr)
   grads = opt.compute_gradients(loss)
   all_vars = tf.contrib.framework.get_variables()
-  for v in all_vars:
-    print(v.name)
+  #for v in all_vars:
+  #  print(v.name)
 
   train_op = opt.apply_gradients(grads, global_step=global_step)
   return train_op

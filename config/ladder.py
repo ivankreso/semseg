@@ -28,6 +28,7 @@ SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
 #IMG_WIDTH = 1024
 #IMG_HEIGHT = 448
 
+
 IMG_WIDTH = 640
 IMG_HEIGHT = 288
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
@@ -63,7 +64,7 @@ tf.app.flags.DEFINE_float('initial_learning_rate', 1e-4,
                           """Initial learning rate.""")
 # default = 3
 tf.app.flags.DEFINE_float('num_epochs_per_decay', 3.0,
-#tf.app.flags.DEFINE_float('num_epochs_per_decay', 2.0,
+#tf.app.flags.DEFINE_float('num_epochs_per_decay', 6,
                           """Epochs after which learning rate decays.""")
 tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.5,
 #tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.2,

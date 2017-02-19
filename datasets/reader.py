@@ -49,7 +49,7 @@ def _read_and_decode(filename_queue):
   return image, labels, weights, num_labels, img_name
 
 
-def num_examples(dataset):
+def num_batches(dataset):
   return int(dataset.num_examples() / FLAGS.batch_size)
 
 
