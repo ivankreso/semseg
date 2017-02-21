@@ -1,5 +1,6 @@
 import os
 import time
+import subprocess
 import numpy as np
 import matplotlib
 #matplotlib.use('TkAgg')
@@ -9,17 +10,33 @@ import skimage as ski
 import skimage.io
 import cv2
 import libs.cylib as cylib
+from os.path import join
 
 import tensorflow as tf
-FLAGS = tf.app.flags.FLAGS
-
 from datasets.cityscapes.cityscapes import CityscapesDataset
+
+FLAGS = tf.app.flags.FLAGS
+proc_status = None
+
+def save_for_evaluation(pred_img, img_names, save_dir):
+  #pred_img = pred_img.astype(np.uint8)
+  eval_img = np.zeros_like(pred_img, dtype=np.uint8)
+  train_ids = CityscapesDataset.train_ids
+  for i in range(FLAGS.num_classes):
+    eval_img[pred_img==i] = train_ids[i]
+  for i in range(pred_img.shape[0]):
+    img_prefix = img_names[i].decode("utf-8")
+    path = join(save_dir, img_prefix+'.png')
+    #print(path)
+    cv2.imwrite(path, eval_img[i])
 
 def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=None):
   print('\nValidation performance:')
   conf_mat = np.ascontiguousarray(
       np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64))
   loss_avg = 0
+  save_dir = join(FLAGS.train_dir, 'results')
+  print('Saving results in: ', save_dir)
   for step in range(num_examples):
     start_time = time.time()
     if len(run_ops) == 4:
@@ -36,21 +53,19 @@ def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=
     #net_labels = out_logits[0].argmax(2).astype(np.int32, copy=False)
     #net_labels = logits[0].argmax(2).astype(np.int32)
     net_labels = logits.argmax(3).astype(np.int32)
+    save_for_evaluation(net_labels, img_names, save_dir)
     #gt_labels = gt_labels.astype(np.int32, copy=False)
     cylib.collect_confusion_matrix(net_labels.reshape(-1),
                                    labels.reshape(-1), conf_mat)
 
-    #if step % 10 == 0:
-    if step % 1 == 0:
+    if step % 50 == 0:
       num_examples_per_step = FLAGS.batch_size
       examples_per_sec = num_examples_per_step / duration
       sec_per_batch = float(duration)
-      if step % 20 == 0:
-        format_str = 'epoch %d, step %d / %d, loss = %.2f \
-          (%.1f examples/sec; %.3f sec/batch)'
-        #print('lr = ', clr)
-        print(format_str % (epoch_num, step, num_examples, loss_val,
-                            examples_per_sec, sec_per_batch))
+      format_str = 'epoch %d, step %d / %d, loss = %.2f \
+        (%.1f examples/sec; %.3f sec/batch)'
+      print(format_str % (epoch_num, step, num_examples, loss_val,
+                          examples_per_sec, sec_per_batch))
     if FLAGS.draw_predictions and step % 20 == 0:
       for i in range(net_labels.shape[0]):
         img_prefix = img_names[i].decode("utf-8")
@@ -65,6 +80,15 @@ def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=
   print('')
   pixel_acc, iou_acc, recall, precision, _ = compute_errors(
       conf_mat, 'Validation', CityscapesDataset.CLASS_INFO, verbose=True)
+  script_path = ('/home/kivan/source/forks/cityscapesScripts/cityscapesscripts/'
+                 'evaluation/evalPixelLevelSemanticLabeling.py ')
+  #gt_dir = '/home/kivan/datasets/Cityscapes/tensorflow/640x272/GT/val/label/'
+  gt_dir = join(FLAGS.dataset_dir, 'GT', 'val', 'label')
+  #subprocess.run([script_path, gt_dir, save_dir], stdout=subprocess.PIPE)
+  global proc_status
+  if proc_status != None:
+    proc_status.wait()
+  proc_status = subprocess.Popen(script_path + gt_dir + ' ' + save_dir, shell=True)
   return loss_avg / num_examples, pixel_acc, iou_acc, recall, precision
 
 def evaluate_depth_prediction(name, sess, epoch_num, run_ops, num_examples):

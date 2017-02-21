@@ -1,10 +1,12 @@
 import os
+from os.path import join
 import sys
 import time
 from shutil import copyfile
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.client import timeline
 
 import libs.cylib as cylib
 import helper
@@ -88,6 +90,7 @@ def train(model, train_dataset, valid_dataset):
       print('\ntensorboard --logdir=' + FLAGS.train_dir + '\n')
       train_data['lr'] += [model.lr.eval(session=sess)]
       num_batches = model.num_batches(train_dataset) // FLAGS.num_validations_per_epoch
+      #for step in range(0):
       for step in range(num_batches):
         start_time = time.time()
         run_ops = train_ops + [train_op, global_step]
@@ -108,12 +111,10 @@ def train(model, train_dataset, valid_dataset):
           #if step % 100 == 0:
           #  model.evaluate_output(ret_val, step)
           #train_helper.print_grad_stats(grads_val, grad_tensors)
-          #run_metadata = tf.RunMetadata()
-          #ret_val = sess.run(run_ops,
-          #            options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
-          #            run_metadata=run_metadata)
-          #(_, loss_val, scores, yt, draw_data_val, img_prefix, global_step_val) = ret_val
           #if step > 10:
+          #  run_metadata = tf.RunMetadata()
+          #  ret_val = sess.run(run_ops, options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
+          #                     run_metadata=run_metadata)
           #  trace = timeline.Timeline(step_stats=run_metadata.step_stats)
           #  trace_file = open('timeline.ctf.json', 'w')
           #  trace_file.write(trace.generate_chrome_trace_format())
@@ -183,11 +184,12 @@ def main(argv=None):  # pylint: disable=unused-argument
     raise ValueError('Train dir exists: ' + FLAGS.train_dir)
   tf.gfile.MakeDirs(FLAGS.train_dir)
 
-  stats_dir = os.path.join(FLAGS.train_dir, 'stats')
+  stats_dir = join(FLAGS.train_dir, 'stats')
   tf.gfile.MakeDirs(stats_dir)
-  tf.gfile.MakeDirs(FLAGS.debug_dir + '/train/')
-  tf.gfile.MakeDirs(FLAGS.debug_dir + '/valid/')
-  f = open(os.path.join(stats_dir, 'log.txt'), 'w')
+  tf.gfile.MakeDirs(join(FLAGS.debug_dir, 'train'))
+  tf.gfile.MakeDirs(join(FLAGS.debug_dir, 'valid'))
+  tf.gfile.MakeDirs(join(FLAGS.train_dir, 'results'))
+  f = open(join(stats_dir, 'log.txt'), 'w')
   sys.stdout = train_helper.Logger(sys.stdout, f)
 
   copyfile(FLAGS.model_path, os.path.join(FLAGS.train_dir, 'model.py'))

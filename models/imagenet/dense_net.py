@@ -34,11 +34,21 @@ bn_params = {
 def normalize_input(rgb):
   return rgb - MEAN_BGR
 
-def layer(net, num_filters, name, is_training, k=3, rate=1):
+def BNReluConv(net, num_filters, name, is_training, k=3):
   with tf.variable_scope(name):
     net = tf.contrib.layers.batch_norm(net, **bn_params)
     net = tf.nn.relu(net)
-    net = layers.conv2d(net, num_filters, kernel_size=k, rate=rate)
+    net = layers.conv2d(net, num_filters, kernel_size=k)
+  return net
+
+def layer(net, num_filters, name, is_training, k=3):
+  with tf.variable_scope(name):
+    net = tf.contrib.layers.batch_norm(net, **bn_params)
+    net = tf.nn.relu(net)
+    net = layers.conv2d(net, 4*num_filters, kernel_size=1)
+    net = tf.contrib.layers.batch_norm(net, **bn_params)
+    net = tf.nn.relu(net)
+    net = layers.conv2d(net, num_filters, kernel_size=k)
     #if is_training: 
       #net = tf.nn.dropout(net, keep_prob=0.8)
   return net
@@ -80,9 +90,10 @@ def build(image, is_training=False):
       normalizer_fn=None, normalizer_params=None,
       weights_initializer=init_func, biases_initializer=None,
       weights_regularizer=layers.l2_regularizer(weight_decay)):
-    net = layers.convolution2d(image, 2*k, 7, stride=2, scope='conv0')
-    net = tf.contrib.layers.batch_norm(net, **bn_params)
-    net = tf.nn.relu(net)
+    with tf.variable_scope('conv0'):
+      net = layers.convolution2d(image, 2*k, 7, stride=2, scope='conv0')
+      net = tf.contrib.layers.batch_norm(net, **bn_params)
+      net = tf.nn.relu(net)
 
     net = layers.max_pool2d(net, 3, stride=2, padding='SAME', scope='pool0')
     net = dense_block(net, block_sizes[0], k, 'block1', is_training)
@@ -94,13 +105,14 @@ def build(image, is_training=False):
     net = dense_block(net, block_sizes[3], k, 'block4', is_training)
     print(net)
 
-  net = tf.contrib.layers.batch_norm(net, **bn_params)
-  net = tf.nn.relu(net)
-  in_k = net.get_shape().as_list()[-2]
-  net = layers.avg_pool2d(net, kernel_size=in_k, scope='global_avg_pool')
-  net = layers.flatten(net, scope='flatten')
-  logits = layers.fully_connected(net, 1000, activation_fn=None, scope='fc1000')
-  return logits
+  with tf.variable_scope('head'):
+    net = tf.contrib.layers.batch_norm(net, **bn_params)
+    net = tf.nn.relu(net)
+    in_k = net.get_shape().as_list()[-2]
+    net = layers.avg_pool2d(net, kernel_size=in_k, scope='global_avg_pool')
+    net = layers.flatten(net, scope='flatten')
+    logits = layers.fully_connected(net, 1000, activation_fn=None, scope='fc1000')
+    return logits
 
 
 def shuffle_data(data_x, data_y):

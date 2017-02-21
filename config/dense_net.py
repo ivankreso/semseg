@@ -6,18 +6,19 @@ import train_helper
 #MODEL_PATH = './models/dense_net/dense_net_full.py'
 #MODEL_PATH = './models/dense_net/dense_net_depth.py'
 #MODEL_PATH = './models/dense_net/dense_net_orig.py'
-MODEL_PATH = './models/dense_net/dense_net_ladder.py'
-SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
+#MODEL_PATH = './models/dense_net/dense_net_ladder.py'
+MODEL_PATH = './models/dense_net/dense_net_ladder2.py'
+SAVE_DIR = os.path.join('/home/kivan/datasets/results/semseg',
                         train_helper.get_time_string())
 
 #IMG_WIDTH = 1152
 #IMG_HEIGHT = 1024
 #DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
-#IMG_WIDTH = 480
-#IMG_HEIGHT = 224
-IMG_WIDTH = 640
-IMG_HEIGHT = 288
+IMG_WIDTH = 384
+IMG_HEIGHT = 164
+#IMG_WIDTH = 640
+#IMG_HEIGHT = 272
 #IMG_WIDTH = 1024
 #IMG_HEIGHT = 432
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
