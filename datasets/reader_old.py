@@ -37,8 +37,8 @@ def _read_and_decode(filename_queue):
   image = tf.reshape(image, shape=[FLAGS.img_height, FLAGS.img_width, FLAGS.img_depth])
   #num_pixels = FLAGS.img_height * FLAGS.img_width
   #labels = tf.reshape(labels, shape=[num_pixels])
-  labels = tf.reshape(labels, shape=[FLAGS.img_height, FLAGS.img_width, 1])
   #weights = tf.reshape(weights, shape=[num_pixels])
+  labels = tf.reshape(labels, shape=[FLAGS.img_height, FLAGS.img_width, 1])
   weights = tf.reshape(weights, shape=[FLAGS.img_height, FLAGS.img_width, 1])
 
   #image = tf.Print(image, [img_name, image[100,100,:]], message="P1: ")
@@ -49,8 +49,8 @@ def _read_and_decode(filename_queue):
   return image, labels, weights, num_labels, img_name
 
 
-def num_examples(dataset):
-  return int(dataset.num_examples() // FLAGS.batch_size)
+def num_batches(dataset):
+  return int(dataset.num_examples() / FLAGS.batch_size)
 
 
 def inputs(dataset, is_training=False, num_epochs=None):

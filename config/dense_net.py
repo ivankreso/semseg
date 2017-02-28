@@ -17,6 +17,8 @@ SAVE_DIR = os.path.join('/home/kivan/datasets/results/semseg',
 
 IMG_WIDTH = 384
 IMG_HEIGHT = 164
+
+#  slow!!!
 #IMG_WIDTH = 640
 #IMG_HEIGHT = 272
 #IMG_WIDTH = 1024
@@ -32,14 +34,17 @@ DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
 # 1e-4 best, 1e-3 is too big
 tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
 tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
-#tf.app.flags.DEFINE_float('initial_learning_rate', 1e-4, '')
+#tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
 # TODO better 4?
-tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
+tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 13, '')
+
+# 1-4
 #tf.app.flags.DEFINE_integer('batch_size', 1, '')
-tf.app.flags.DEFINE_integer('batch_size', 2, '')
+#tf.app.flags.DEFINE_integer('batch_size', 2, '')
+tf.app.flags.DEFINE_integer('batch_size', 3, '')
 tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
-tf.app.flags.DEFINE_integer('max_epochs', 100, 'Number of epochs to run.')
+tf.app.flags.DEFINE_integer('max_epochs', 50, 'Number of epochs to run.')
 
 #tf.app.flags.DEFINE_string('optimizer', 'Momentum', '')
 ##tf.app.flags.DEFINE_float('initial_learning_rate', 2e-4,
@@ -62,7 +67,6 @@ tf.app.flags.DEFINE_string('resume_path', '', '')
 tf.app.flags.DEFINE_integer('img_width', IMG_WIDTH, '')
 tf.app.flags.DEFINE_integer('img_height', IMG_HEIGHT, '')
 tf.app.flags.DEFINE_integer('img_depth', 3, '')
-tf.app.flags.DEFINE_integer('net_subsampling', 16, '')
 
 tf.app.flags.DEFINE_string('model_path', MODEL_PATH, '')
 tf.app.flags.DEFINE_string('dataset_dir', DATASET_DIR, '')

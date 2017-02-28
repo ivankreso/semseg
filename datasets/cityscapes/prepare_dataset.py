@@ -33,10 +33,11 @@ tf.app.flags.DEFINE_integer('cy_start', 30, '')
 tf.app.flags.DEFINE_integer('cy_end', 900, '')
 #tf.app.flags.DEFINE_integer('img_width', 640, '')
 #tf.app.flags.DEFINE_integer('img_height', 272, '')
-tf.app.flags.DEFINE_integer('img_width', 384, '')
-tf.app.flags.DEFINE_integer('img_height', 164, '')
-#tf.app.flags.DEFINE_integer('img_width', 1024, '')
-#tf.app.flags.DEFINE_integer('img_height', 432, '')
+#tf.app.flags.DEFINE_integer('img_width', 384, '')
+#tf.app.flags.DEFINE_integer('img_height', 164, '')
+tf.app.flags.DEFINE_integer('img_width', 1024, '')
+tf.app.flags.DEFINE_integer('img_height', 432, '')
+tf.app.flags.DEFINE_boolean('downsample', True, '')
 #tf.app.flags.DEFINE_integer('img_width', 1600, '')
 #tf.app.flags.DEFINE_integer('img_height', 680, '')
 
@@ -167,14 +168,16 @@ def prepare_dataset(name):
       #print(gt_path)
       full_gt_img = ski.data.load(gt_path)
       full_gt_img = np.ascontiguousarray(full_gt_img[cy_start:cy_end,cx_start:cx_end])
-      full_gt_img = ski.transform.resize(full_gt_img, (FLAGS.img_height, FLAGS.img_width),
-                                         order=0, preserve_range=True).astype(np.uint8)
+      if FLAGS.downsample:
+        full_gt_img = ski.transform.resize(full_gt_img, (FLAGS.img_height, FLAGS.img_width),
+                                           order=0, preserve_range=True).astype(np.uint8)
       instance_gt_path = join(gt_dir, city, img_name[:-4] + '_gtFine_instanceIds.png')
       instance_gt_img = ski.data.load(instance_gt_path)
       instance_gt_img = np.ascontiguousarray(instance_gt_img[cy_start:cy_end,cx_start:cx_end])
-      instance_gt_img = ski.transform.resize(
-          instance_gt_img, (FLAGS.img_height, FLAGS.img_width),
-          order=0, preserve_range=True).astype(np.uint16)
+      if FLAGS.downsample:
+        instance_gt_img = ski.transform.resize(
+            instance_gt_img, (FLAGS.img_height, FLAGS.img_width),
+            order=0, preserve_range=True).astype(np.uint16)
       gt_img = convert_ids(full_gt_img)
       #print(gt_img[40:60,100:110])
       #gt_weights = gt_data[1]

@@ -43,10 +43,37 @@ def total_loss_sum(losses):
   #print(losses)
   # Calculate the total loss for the current tower.
   #regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-  regularization_losses = tf.contrib.losses.get_regularization_losses()
+  #regularization_losses = tf.contrib.losses.get_regularization_losses()
+  regularization_losses = tf.losses.get_regularization_losses()
   #total_loss = tf.add_n(losses + regularization_losses, name='total_loss')
   total_loss = tf.add_n(losses + regularization_losses, name='total_loss')
   return total_loss
+
+
+def weighted_cross_entropy_loss(logits, labels, weights=None, max_weight=100):
+  print('loss: cross-entropy')
+  num_pixels = -1
+  with tf.name_scope(None, 'CrossEntropyLoss', [logits, labels]):
+    labels = tf.reshape(labels, shape=[num_pixels])
+    onehot_labels = tf.one_hot(labels, FLAGS.num_classes)
+    logits = tf.reshape(logits, [num_pixels, FLAGS.num_classes])
+    num_labels = tf.reduce_sum(onehot_labels)
+    xent = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=onehot_labels)
+
+    print('Max weight = ', max_weight)
+    weights = tf.reshape(weights, shape=[num_pixels])
+    weights = tf.minimum(tf.to_float(max_weight), weights)
+    wgt_sum = tf.reduce_sum(weights)
+    norm_factor = num_labels / wgt_sum
+    # weights need to sum to 1
+    weights = tf.multiply(weights, norm_factor)
+    xent = tf.multiply(weights, xent)
+
+    #num_labels = tf.Print(num_labels, [num_labels, wgt_sum], 'num_labels = ')
+    #xent = tf.Print(xent, [xent], 'num_labels = ')
+    xent = tf.reduce_sum(xent) / num_labels
+    print(xent)
+    return xent
 
 
 def mse(yp, yt):
@@ -56,21 +83,6 @@ def mse(yp, yt):
     yp = tf.reshape(yp, shape=[num_examples])
     return tf.reduce_mean(tf.square(yt - yp))
 
-def weighted_cross_entropy_loss(logits, labels, weights=None, max_weight=100):
-  print('loss: Weighted Cross Entropy Loss')
-  num_examples = -1
-  #num_examples = FLAGS.batch_size * FLAGS.img_height * FLAGS.img_width
-  with tf.name_scope(None, 'WeightedCrossEntropyLoss', [logits, labels]):
-    #one_hot_labels = tf.one_hot(tf.to_int64(labels), FLAGS.num_classes, 1, 0)
-    labels = tf.reshape(labels, shape=[num_examples])
-    weights = tf.reshape(weights, shape=[num_examples])
-    onehot_labels = tf.one_hot(labels, FLAGS.num_classes)
-    logits = tf.reshape(logits, [num_examples, FLAGS.num_classes])
-    #loss = tf.losses.softmax_cross_entropy(onehot_labels, logits, weights)
-    xent = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=onehot_labels)
-    print(xent)
-    xent = tf.multiply(tf.minimum(tf.to_float(max_weight), weights), xent)
-    return tf.reduce_mean(xent)
 
 
 def weighted_cross_entropy_loss_deprecated(logits, labels, weights=None, max_weight=100):
