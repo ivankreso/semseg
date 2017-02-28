@@ -101,7 +101,7 @@ def build(image, is_training=False):
       weights_initializer=init_func, biases_initializer=None,
       weights_regularizer=layers.l2_regularizer(weight_decay)):
     with tf.variable_scope('conv0'):
-      net = layers.convolution2d(image, 2*k, 7, stride=2)
+      net = layers.convolution2d(image, 2*k, 7, stride=2, padding='VALID')
       net = tf.contrib.layers.batch_norm(net, **bn_params)
       net = tf.nn.relu(net)
 
@@ -113,18 +113,17 @@ def build(image, is_training=False):
     net = dense_block(net, block_sizes[2], k, 'block2', is_training)
     net = transition(net, compression, 'block2/transition')
     net = dense_block(net, block_sizes[3], k, 'block3', is_training)
+    feats=net
     print(net)
 
-  with tf.variable_scope('head'):
-    net = tf.contrib.layers.batch_norm(net, **bn_params)
-    net = tf.nn.relu(net)
-    in_k = net.get_shape().as_list()[-2]
-    net = layers.avg_pool2d(net, kernel_size=in_k, scope='global_avg_pool')
-    net = layers.flatten(net, scope='flatten')
-    logits = layers.fully_connected(net, 1000, activation_fn=None, scope='fc1000')
-    prob = tf.nn.softmax(logits)
-    return logits, prob
-
+    with tf.variable_scope('head'):
+      net = tf.contrib.layers.batch_norm(net, **bn_params)
+      net = tf.nn.relu(net)
+      net = tf.reduce_mean(net, axis=[1,2])
+      logits = layers.fully_connected(net,
+        1000, activation_fn=None, scope='fc1000')
+      prob = tf.nn.softmax(logits)
+  return logits, prob, feats
 
 def shuffle_data(data_x, data_y):
   indices = np.arange(data_x.shape[0])
@@ -137,7 +136,7 @@ if __name__ == '__main__':
   img_size = 224
   image = tf.placeholder(tf.float32, [None, img_size, img_size, 3], 'input')
   labels = tf.placeholder(tf.int32, [None], 'label')
-  logits, prob = build(image, is_training=False)
+  logits, prob, _ = build(image, is_training=False)
   #init_op, init_feed = create_init_op(resnet_param)
   init_path = init_dir + 'dense_net_' + str(model_depth) + '.pickle'
   #init_map = np.load(init_path)
