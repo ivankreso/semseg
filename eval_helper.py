@@ -1,11 +1,13 @@
 import os
 import time
 import subprocess
+import pickle
+
 import numpy as np
 import matplotlib
 #matplotlib.use('TkAgg')
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+#matplotlib.use('Agg')
+#import matplotlib.pyplot as plt
 import skimage as ski
 import skimage.io
 import cv2
@@ -17,6 +19,15 @@ from datasets.cityscapes.cityscapes import CityscapesDataset
 
 FLAGS = tf.app.flags.FLAGS
 proc_status = None
+
+
+def plot_training_progress(save_dir, train_data, valid_data):
+  data = {'train':train_data, 'valid':valid_data}
+  save_path = os.path.join(save_dir, 'stats.pickle')
+  with open(save_path, 'wb') as f:
+    pickle.dump(data, f)
+  print('Plot with:\npython plot_training_stats.py ', save_path)
+
 
 def save_for_evaluation(pred_img, img_names, save_dir):
   #pred_img = pred_img.astype(np.uint8)
@@ -216,7 +227,8 @@ def compute_errors(conf_mat, name, class_info, verbose=True):
     print(name + ' pixel accuracy = %.2f %%' % avg_pixel_acc)
   return avg_pixel_acc, avg_class_iou, avg_class_recall, avg_class_precision, total_size
 
-def plot_training_progress(save_dir, train_data, valid_data):
+
+def plot_training_progress_matplotlib(save_dir, train_data, valid_data):
   fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16,8))
 
   linewidth = 2

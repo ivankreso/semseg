@@ -1,6 +1,5 @@
 import os
 from os.path import join
-
 import pickle
 import numpy as np
 import tensorflow as tf
@@ -9,8 +8,7 @@ import skimage.data
 import skimage.transform
 import cv2
 from tqdm import trange
-
-import data_utils
+from cityscapes import CityscapesDataset
 
 np.set_printoptions(linewidth=250)
 
@@ -38,7 +36,7 @@ tf.app.flags.DEFINE_integer('cy_end', 900, '')
 #tf.app.flags.DEFINE_integer('img_width', 384, '')
 #tf.app.flags.DEFINE_integer('img_height', 164, '')
 tf.app.flags.DEFINE_integer('img_width', 1024, '')
-tf.app.flags.DEFINE_integer('img_height', 448, '')
+tf.app.flags.DEFINE_integer('img_height', 432, '')
 tf.app.flags.DEFINE_boolean('downsample', True, '')
 #tf.app.flags.DEFINE_integer('img_width', 1600, '')
 #tf.app.flags.DEFINE_integer('img_height', 680, '')
@@ -94,6 +92,27 @@ def create_tfrecord(rgb, label_map, weight_map, depth_img,
   writer.write(example.SerializeToString())
   writer.close()
 
+
+def convert_ids(img):
+  img_train = np.zeros_like(img)
+  img_train.fill(255)
+  for i, cid in enumerate(CityscapesDataset.train_ids):
+    img_train[img==cid] = i
+  return img_train
+
+def get_class_weights(gt_img, num_classes=19, max_wgt=100):
+  height = gt_img.shape[0]
+  width = gt_img.shape[1]
+  weights = np.zeros((height, width), dtype=np.float32)
+  num_labels = (gt_img >= 0).sum()
+  for i in range(num_classes):
+    mask = gt_img == i
+    class_cnt = mask.sum()
+    if class_cnt > 0:
+      wgt = min(max_wgt, 1.0 / (class_cnt / num_labels))
+      weights[mask] = wgt
+      #print(i, wgt)
+  return weights, num_labels
 
 def prepare_dataset(name):
   print('Preparing ' + name)
@@ -159,12 +178,12 @@ def prepare_dataset(name):
         instance_gt_img = ski.transform.resize(
             instance_gt_img, (FLAGS.img_height, FLAGS.img_width),
             order=0, preserve_range=True).astype(np.uint16)
-      gt_img = data_utils.convert_ids(full_gt_img)
+      gt_img = convert_ids(full_gt_img)
       #print(gt_img[40:60,100:110])
       #gt_weights = gt_data[1]
       gt_img = gt_img.astype(np.int8)
       #print((gt_img == -1).sum())
-      gt_weights, num_labels = data_utils.get_class_weights(gt_img)
+      gt_weights, num_labels = get_class_weights(gt_img)
 
       # Just to test correct casting in numpy/skimage - this must be the same
       #gt_ids_test = ski.util.img_as_ubyte(gt_ids_test).astype(np.int8)

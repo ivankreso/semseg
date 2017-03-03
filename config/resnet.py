@@ -14,7 +14,7 @@ import train_helper
 #MODEL_PATH = './models/resnet/resnet_dilated.py'
 #MODEL_PATH = './models/resnet/resnet_flip.py'
 MODEL_PATH = './models/resnet/ladder.py'
-SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
+SAVE_DIR = os.path.join('/home/kivan/datasets/results/semseg',
                         train_helper.get_time_string())
 
 #IMG_WIDTH = 1152
@@ -24,10 +24,10 @@ SAVE_DIR = os.path.join('/home/kivan/source/results/semseg/tf/nets',
 #IMG_WIDTH = 480
 #IMG_HEIGHT = 224
 
-IMG_WIDTH = 640
-IMG_HEIGHT = 288
-#IMG_WIDTH = 1024
-#IMG_HEIGHT = 448
+#IMG_WIDTH = 640
+#IMG_HEIGHT = 288
+IMG_WIDTH = 1024
+IMG_HEIGHT = 432
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
                            '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 #DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
@@ -40,9 +40,9 @@ tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 2e-4, '')
-tf.app.flags.DEFINE_float('initial_learning_rate', 1e-4, '')
+tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 4, '')
-tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
+tf.app.flags.DEFINE_integer('num_epochs_per_decay', 7, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 10, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 15, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 10, '')

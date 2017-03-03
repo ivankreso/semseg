@@ -15,9 +15,11 @@ class Logger(object):
     for f in self.files:
       f.flush()
 
-def minimize(opts, loss, global_step, prefix):
+
+def minimize_fine_tune(opts, loss, global_step, prefix):
   all_vars = tf.trainable_variables()
-  grads = tf.gradients(loss, all_vars)
+  #grads = tf.gradients(loss, all_vars)
+  grads = tf.gradients(loss, all_vars, colocate_gradients_with_ops=True)
   resnet_grads_and_vars = []
   head_grads_and_vars = []
   for i, v in enumerate(all_vars):
@@ -29,6 +31,16 @@ def minimize(opts, loss, global_step, prefix):
   train_op1 = opts[0].apply_gradients(resnet_grads_and_vars, global_step=global_step)
   train_op2 = opts[1].apply_gradients(head_grads_and_vars)
   return tf.group(train_op1, train_op2)
+
+
+def minimize(opt, loss, global_step):
+  grads = opt.compute_gradients(loss)
+  #all_vars = tf.contrib.framework.get_variables()
+  #for v in all_vars:
+  #  print(v.name)
+  train_op = opt.apply_gradients(grads, global_step=global_step)
+  return train_op
+
 
 def print_grad_stats(grads, grad_tensors):
   #for grad in grads:

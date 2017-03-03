@@ -11,32 +11,32 @@ MODEL_PATH = './models/dense_net/dense_net_ladder2.py'
 SAVE_DIR = os.path.join('/home/kivan/datasets/results/semseg',
                         train_helper.get_time_string())
 
-#IMG_WIDTH = 1152
-#IMG_HEIGHT = 1024
-#DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
+IMG_WIDTH = 1152
+IMG_HEIGHT = 1024
+DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
-IMG_WIDTH = 384
-IMG_HEIGHT = 164
+#IMG_WIDTH = 384
+#IMG_HEIGHT = 164
 
-#  slow!!!
+#IMG_WIDTH = 1024
+#IMG_HEIGHT = 448
 #IMG_WIDTH = 640
 #IMG_HEIGHT = 272
-#IMG_WIDTH = 1024
-#IMG_HEIGHT = 432
-DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
-                           '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 #DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
-#                           '{}x{}_rgbd/'.format(IMG_WIDTH, IMG_HEIGHT))
+#                           '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 
 
-#tf.app.flags.DEFINE_string('optimizer', 'RMSprop', '')
-#tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
-# 1e-4 best, 1e-3 is too big
+# 1e-3 best, 1e-2 is too big
 tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
-tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
+
+# best = 6
+tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
+tf.app.flags.DEFINE_integer('num_epochs_per_decay', 7, '')
+#tf.app.flags.DEFINE_float('initial_learning_rate', 3e-4, '')
 # TODO better 4?
-tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 13, '')
 
 # 1-4

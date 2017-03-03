@@ -89,7 +89,7 @@ def train(model, train_dataset, valid_dataset):
     print('\ntensorboard --logdir=' + FLAGS.train_dir + '\n')
     train_data['lr'] += [model.lr.eval(session=sess)]
     num_batches = model.num_batches(train_dataset) // FLAGS.num_validations_per_epoch
-    #for step in range(0):
+    #for step in range(20):
     for step in range(num_batches):
       start_time = time.time()
       run_ops = train_ops + [train_op, global_step]
