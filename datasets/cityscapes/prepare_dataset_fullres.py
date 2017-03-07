@@ -28,19 +28,28 @@ flags.DEFINE_integer('img_height', 1024, '')
 flags.DEFINE_integer('rf_half_size', 128, '')
 flags.DEFINE_string('save_dir',
     '/home/kivan/datasets/Cityscapes/tensorflow/' + str(FLAGS.img_width) +
-    'x' + str(FLAGS.img_height) + '/', '')
+    'x' + str(FLAGS.img_height) + '_full/', '')
 
 #flags.DEFINE_integer('cx_start', 0, '')
 #flags.DEFINE_integer('cx_end', 2048, '')
 #flags.DEFINE_integer('cy_start', 30, '')
 #flags.DEFINE_integer('cy_end', 894, '')
+flags.DEFINE_integer('cy_start', 0, '')
+flags.DEFINE_integer('cy_end', 896, '')
 FLAGS = flags.FLAGS
 
-def crop_data(img, left_end, right_start):
+def crop_data_split(img, left_end, right_start, clear_overlap=False, fill_val=None):
   img_left = np.ascontiguousarray(img[:,:left_end,...])
   img_right = np.ascontiguousarray(img[:,right_start:,...])
-  return img_left, img_right
+  if clear_overlap:
+    half_width = FLAGS.img_width // 2
+    img_left[:,half_width:] = fill_val
+    img_right[:,:FLAGS.rf_half_size] = fill_val
+  return [img_left, img_right]
 
+def crop_data(img):
+  img = np.ascontiguousarray(img[FLAGS.cy_start:FLAGS.cy_end,...])
+  return [img]
 
 def _int64_feature(value):
   """Wrapper for inserting int64 features into Example proto."""
@@ -129,11 +138,18 @@ def prepare_dataset(name):
       weights, num_labels = data_utils.get_class_weights(gt_img)
 
 
-      orig_gt_crops = crop_data(orig_gt_img, left_x_end, right_x_start)
-      instance_gt_crops = crop_data(instance_gt_img, left_x_end, right_x_start)
-      rgb_crops = crop_data(rgb, left_x_end, right_x_start)
-      gt_crops = crop_data(gt_img, left_x_end, right_x_start)
-      weights_crops = crop_data(weights, left_x_end, right_x_start)
+      #orig_gt_crops = crop_data(orig_gt_img, left_x_end, right_x_start)
+      #instance_gt_crops = crop_data(instance_gt_img, left_x_end, right_x_start)
+      #rgb_crops = crop_data(rgb, left_x_end, right_x_start)
+      #gt_crops = crop_data(gt_img, left_x_end, right_x_start,
+      #                     clear_overlap=True, fill_val=-1)
+      #weights_crops = crop_data(weights, left_x_end, right_x_start,
+      #                          clear_overlap=True, fill_val=0)
+      orig_gt_crops = crop_data(orig_gt_img)
+      instance_gt_crops = crop_data(instance_gt_img)
+      rgb_crops = crop_data(rgb)
+      gt_crops = crop_data(gt_img)
+      weights_crops = crop_data(weights)
 
       for i in range(len(rgb_crops)):
         img_name = img_prefix + '_' + str(i)

@@ -71,7 +71,8 @@ def inputs(dataset, is_training=False, num_epochs=None):
   if is_training:
     batch_size = FLAGS.batch_size
   else:
-    batch_size = 1
+    batch_size = FLAGS.batch_size_valid
+    #assert dataset.num_examples() % batch_size == 0
 
   with tf.name_scope('input'), tf.device('/cpu:0'):
     filename_queue = tf.train.string_input_producer(dataset.get_filenames(), num_epochs=num_epochs,

@@ -42,6 +42,8 @@ def save_for_evaluation(pred_img, img_names, save_dir):
     cv2.imwrite(path, eval_img[i])
 
 def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=None):
+  #run_cityscapes_script = False
+  run_cityscapes_script = True
   print('\nValidation performance:')
   conf_mat = np.ascontiguousarray(
       np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64))
@@ -64,7 +66,9 @@ def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=
     #net_labels = out_logits[0].argmax(2).astype(np.int32, copy=False)
     #net_labels = logits[0].argmax(2).astype(np.int32)
     net_labels = logits.argmax(3).astype(np.int32)
-    save_for_evaluation(net_labels, img_names, save_dir)
+    if run_cityscapes_script:
+      save_for_evaluation(net_labels, img_names, save_dir)
+
     #gt_labels = gt_labels.astype(np.int32, copy=False)
     cylib.collect_confusion_matrix(net_labels.reshape(-1),
                                    labels.reshape(-1), conf_mat)
@@ -78,6 +82,7 @@ def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=
       print(format_str % (epoch_num, step, num_examples, loss_val,
                           examples_per_sec, sec_per_batch))
     if FLAGS.draw_predictions and step % 20 == 0:
+    #if FLAGS.draw_predictions:
       for i in range(net_labels.shape[0]):
         img_prefix = img_names[i].decode("utf-8")
         #save_path = FLAGS.debug_dir + '/valid/' + '%03d_' % epoch_num + img_prefix + '.png'
@@ -96,10 +101,13 @@ def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=
   #gt_dir = '/home/kivan/datasets/Cityscapes/tensorflow/640x272/GT/val/label/'
   gt_dir = join(FLAGS.dataset_dir, 'GT', 'val', 'label')
   #subprocess.run([script_path, gt_dir, save_dir], stdout=subprocess.PIPE)
-  global proc_status
-  if proc_status != None:
-    proc_status.wait()
-  proc_status = subprocess.Popen(script_path + gt_dir + ' ' + save_dir, shell=True)
+  if run_cityscapes_script:
+    global proc_status
+    if proc_status != None:
+      proc_status.wait()
+    print('Running Cityscapes evaluation script..')
+    cmd = script_path + gt_dir + ' ' + save_dir
+    proc_status = subprocess.Popen(cmd, shell=True)
   return loss_avg / num_examples, pixel_acc, iou_acc, recall, precision
 
 def evaluate_depth_prediction(name, sess, epoch_num, run_ops, num_examples):

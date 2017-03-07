@@ -86,10 +86,11 @@ def train(model, train_dataset, valid_dataset):
   ex_start_time = time.time()
   for epoch_num in range(1, FLAGS.max_epochs + 1):
     train_loss_sum = 0
-    print('\ntensorboard --logdir=' + FLAGS.train_dir + '\n')
+    print('\nnvim ' + FLAGS.train_dir + 'model.py')
+    print('tensorboard --logdir=' + FLAGS.train_dir + '\n')
     train_data['lr'] += [model.lr.eval(session=sess)]
     num_batches = model.num_batches(train_dataset) // FLAGS.num_validations_per_epoch
-    #for step in range(20):
+    #for step in range(30):
     for step in range(num_batches):
       start_time = time.time()
       run_ops = train_ops + [train_op, global_step]
@@ -138,7 +139,9 @@ def train(model, train_dataset, valid_dataset):
       #if FLAGS.draw_predictions and step % 50 == 0:
       #  model.draw_prediction('train', epoch_num, step, ret_val)
 
-      if step % 50 == 0:
+      #if step % 50 == 0:
+      if step % 30 == 0:
+      #if step % 1 == 0:
         examples_per_sec = FLAGS.batch_size / duration
         sec_per_batch = float(duration)
 

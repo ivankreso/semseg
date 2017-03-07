@@ -13,7 +13,6 @@ import skimage.io
 
 np.set_printoptions(linewidth=250)
 
-import slim
 import libs.cylib as cylib
 import helper
 import eval_helper
