@@ -14,17 +14,17 @@ SAVE_DIR = os.path.join('/home/kivan/datasets/results/semseg',
 #IMG_WIDTH, IMG_HEIGHT = 1152, 1024
 #DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
-#IMG_WIDTH, IMG_HEIGHT = 2048, 896
-#DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024_full/'
+IMG_WIDTH, IMG_HEIGHT = 2048, 896
+DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024_full/'
 
-IMG_WIDTH, IMG_HEIGHT = 1024, 448
-DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
-                           '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
+#IMG_WIDTH, IMG_HEIGHT = 1024, 448
+#IMG_WIDTH, IMG_HEIGHT = 640, 272
+#IMG_WIDTH, IMG_HEIGHT = 768, 320
+#DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
+#                           '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 
 #IMG_WIDTH = 384
 #IMG_HEIGHT = 164
-#IMG_WIDTH = 640
-#IMG_HEIGHT = 272
 
 
 # 1e-3 best, 1e-2 is too big

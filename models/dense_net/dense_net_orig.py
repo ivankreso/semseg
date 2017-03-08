@@ -156,7 +156,8 @@ def _build(image, depth, is_training):
 
 def build(dataset, is_training, reuse=False):
   with tf.variable_scope('', reuse=reuse):
-    x, labels, weights, depth, img_names = reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
+    x, labels, weights, depth, img_names = reader.inputs(
+        dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
     x, depth = normalize_input(x, depth)
 
     logits = _build(x, depth, is_training)

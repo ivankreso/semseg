@@ -24,7 +24,7 @@ def minimize_fine_tune(opts, loss, global_step, prefix):
   head_grads_and_vars = []
   for i, v in enumerate(all_vars):
     if v.name[:4] == prefix:
-      print(v.name, ' --> lr_fine * 10')
+      print(v.name, ' --> with base learning rate')
       head_grads_and_vars += [(grads[i], v)]
     else:
       resnet_grads_and_vars += [(grads[i], v)]
