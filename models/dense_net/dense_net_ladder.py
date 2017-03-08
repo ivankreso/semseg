@@ -367,8 +367,6 @@ def _build_small(image, depth, is_training=False):
       #  net, _ = BNReluConv(net, context_size, 'conv1', k=7, rate=2)
       #else:
       #  net, _ = BNReluConv(net, context_size, 'conv1', k=7)
-      #net = tf.contrib.layers.batch_norm(net, **bn_params)
-      #net = tf.nn.relu(net)
 
       final_h = net.get_shape().as_list()[height_dim]
       if final_h > 14:
@@ -385,6 +383,9 @@ def _build_small(image, depth, is_training=False):
         print('3x3')
         net, _ = BNReluConv(net, context_size, 'conv1', k=3)
 
+
+      net = tf.contrib.layers.batch_norm(net, **bn_params)
+      net = tf.nn.relu(net)
       print('Before upsampling: ', net)
       mid_logits = net
 
@@ -670,14 +671,15 @@ def _build(image, depth, is_training=False):
       #skip_layers.append([skip, km//4, 'block0', depth])
       #skip_layers.append([skip, km, 'block0', depth])
 
-    with tf.device(gpu2):
+    #with tf.device(gpu2):
       net = dense_block(net, block_sizes[1], k, 'block1', is_training)
       #net, skip = dense_block(net, block_sizes[1], k, 'block1', is_training, split=True)
       #skip_layers.append([skip, km//2, 'block1_mid', depth])
       net, skip = transition(net, compression, 'block1/transition')
-      skip_layers.append([skip, km//2, 'block1', depth])
-      #skip_layers.append([skip, km, 'block1', depth])
+      #skip_layers.append([skip, km//2, 'block1', depth])
+      skip_layers.append([skip, km, 'block1', depth])
 
+    with tf.device(gpu2):
       # works the same with split, not 100%
       net, skip = dense_block(net, block_sizes[2], k, 'block2', is_training, split=True)
       skip_layers.append([skip, km, 'block2_split', depth])
