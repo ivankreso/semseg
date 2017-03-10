@@ -13,9 +13,9 @@ SAVE_DIR = os.path.join('/home/kivan/datasets/results/semseg',
 #IMG_WIDTH, IMG_HEIGHT = 2048, 896
 #DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024_full/'
 
-#IMG_WIDTH, IMG_HEIGHT = 1024, 448
 #IMG_WIDTH, IMG_HEIGHT = 640, 272
 
+#IMG_WIDTH, IMG_HEIGHT = 1024, 448
 IMG_WIDTH, IMG_HEIGHT = 768, 320
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
                            '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
@@ -31,12 +31,11 @@ tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
 
 # best = 6
 #tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
-#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
 # best 3e-4
 #tf.app.flags.DEFINE_float('initial_learning_rate', 3e-4, '')
 tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
 tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
-#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 7, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 3e-4, '')
 # TODO better 4?
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 13, '')

@@ -47,9 +47,11 @@ def crop_data_split(img, left_end, right_start, clear_overlap=False, fill_val=No
     img_right[:,:FLAGS.rf_half_size] = fill_val
   return [img_left, img_right]
 
+
 def crop_data(img):
   img = np.ascontiguousarray(img[FLAGS.cy_start:FLAGS.cy_end,...])
   return [img]
+
 
 def _int64_feature(value):
   """Wrapper for inserting int64 features into Example proto."""
@@ -62,7 +64,8 @@ def _bytes_feature(value):
   """Wrapper for inserting bytes features into Example proto."""
   return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
-def create_tfrecord(rgb, label_map, weight_map, num_labels, img_name, save_dir):
+
+def create_tfrecord(rgb, label_map, weight_map, depth_img, num_labels, img_name, save_dir):
   rows = rgb.shape[0]
   cols = rgb.shape[1]
   depth = rgb.shape[2]
@@ -70,6 +73,7 @@ def create_tfrecord(rgb, label_map, weight_map, num_labels, img_name, save_dir):
   filename = os.path.join(save_dir + img_name + '.tfrecords')
   writer = tf.python_io.TFRecordWriter(filename)
   rgb_raw = rgb.tostring()
+  disp_raw = depth_img.tostring()
   labels_raw = label_map.tostring()
   weights_str = weight_map.tostring()
   example = tf.train.Example(features=tf.train.Features(feature={
@@ -80,8 +84,9 @@ def create_tfrecord(rgb, label_map, weight_map, num_labels, img_name, save_dir):
       'img_name': _bytes_feature(img_name.encode()),
       'rgb': _bytes_feature(rgb_raw),
       'label_weights': _bytes_feature(weights_str),
-      'labels': _bytes_feature(labels_raw)}))
-      #'disparity': _bytes_feature(disp_raw),
+      'labels': _bytes_feature(labels_raw),
+      'disparity': _bytes_feature(disp_raw)
+      }))
   writer.write(example.SerializeToString())
   writer.close()
 
@@ -90,6 +95,7 @@ def prepare_dataset(name):
   #rgb_means = [123.68, 116.779, 103.939]
   print('Preparing ' + name)
   root_dir = join(FLAGS.data_dir, 'rgb', name)
+  depth_dir = join(FLAGS.data_dir, 'depth', name)
   gt_dir = join(FLAGS.gt_dir, name)
   cities = next(os.walk(root_dir))[1]
   save_dir = FLAGS.save_dir + name + '/'
@@ -105,6 +111,8 @@ def prepare_dataset(name):
   right_x_start = int(half_width - FLAGS.rf_half_size)
   #mean_sum = np.zeros(3, dtype=np.float64)
   #std_sum = np.zeros(3, dtype=np.float64)
+  mean_sum = np.zeros(1, dtype=np.float64)
+  std_sum = np.zeros(1, dtype=np.float64)
   img_cnt = 0
   for city in cities:
     print(city)
@@ -117,10 +125,15 @@ def prepare_dataset(name):
       rgb_path = join(root_dir, city, img_name)
       #rgb = ski.data.load(rgb_path)
       rgb = cv2.imread(rgb_path, cv2.IMREAD_COLOR)
+      depth_path = join(depth_dir, city, img_prefix + '_leftImg8bit.png')
+      depth = ski.data.load(depth_path)
+      depth = np.round(depth / 256.0).astype(np.uint8)
 
       # compute mean
       #mean_sum += rgb.mean((0,1))
       #std_sum += rgb.std((0,1))
+      #mean_sum += depth.mean()
+      #std_sum += depth.std()
       #print('mean = ', mean_sum / img_cnt)
       #print('std = ', std_sum / img_cnt)
       #continue
@@ -148,13 +161,14 @@ def prepare_dataset(name):
       orig_gt_crops = crop_data(orig_gt_img)
       instance_gt_crops = crop_data(instance_gt_img)
       rgb_crops = crop_data(rgb)
+      depth_crops = crop_data(depth)
       gt_crops = crop_data(gt_img)
       weights_crops = crop_data(weights)
 
       for i in range(len(rgb_crops)):
         img_name = img_prefix + '_' + str(i)
         create_tfrecord(rgb_crops[i], gt_crops[i], weights_crops[i],
-                        num_labels, img_name, save_dir)
+                        depth_crops[i], num_labels, img_name, save_dir)
         ski.io.imsave(join(gt_save_dir, 'label', img_name + '.png'),
                       orig_gt_crops[i])
         ski.io.imsave(join(gt_save_dir, 'instance', img_name + '.png'),

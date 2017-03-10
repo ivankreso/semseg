@@ -81,5 +81,5 @@ def inputs(dataset, is_training=False, num_epochs=None):
         [image, labels, weights, img_name], batch_size=batch_size, num_threads=2,
         capacity=64)
 
-    return image, labels, weights, labels, img_name
+    return image, labels, weights, None, img_name
 

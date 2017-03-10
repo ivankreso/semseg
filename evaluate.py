@@ -70,23 +70,27 @@ def evaluate(model, dataset, save_dir):
     net_labels = out_logits[0].argmax(2).astype(np.int32)
     #gt_labels = gt_labels.astype(np.int32, copy=False)
     cylib.collect_confusion_matrix(net_labels.reshape(-1), gt_labels.reshape(-1), conf_mat)
-    save_path = os.path.join(save_dir, img_prefix + '.png')
-    #error_save_path = os.path.join(save_dir, str(loss_val) + img_prefix + '_errors.png')
-    error_save_path = os.path.join(save_dir, img_prefix + '_' + str(loss_val) + '_error.png')
     gt_labels = gt_labels.reshape(net_labels.shape)
-    eval_helper.draw_output(net_labels, CityscapesDataset.CLASS_INFO, save_path)
+    pred_labels = np.copy(net_labels)
     net_labels[net_labels == gt_labels] = -1
     net_labels[gt_labels == -1] = -1
+    num_mistakes = (net_labels >= 0).sum()
+    img_prefix = '%07d_'%num_mistakes + img_prefix
+    pred_save_path = os.path.join(save_dir, img_prefix + '.png')
+    eval_helper.draw_output(pred_labels, CityscapesDataset.CLASS_INFO, pred_save_path)
+    #error_save_path = os.path.join(save_dir, str(loss_val) + img_prefix + '_errors.png')
+    filename =  img_prefix + '_' + str(loss_val) + '_error.png'
+    error_save_path = os.path.join(save_dir, filename)
     eval_helper.draw_output(net_labels, CityscapesDataset.CLASS_INFO, error_save_path)
     #print(q_size)
   #print(conf_mat)
   #img_names = [[x,y] for (y,x) in sorted(zip(loss_vals, img_names))]
-  sorted_data = [x for x in sorted(zip(loss_vals, img_names), reverse=True)]
-  print(img_names)
-  for i, elem in enumerate(sorted_data):
-    print('Xent loss = ', elem[0])
-    ski.io.imshow(os.path.join(save_dir, elem[1] + '_errors.png'))
-    ski.io.show()
+  #sorted_data = [x for x in sorted(zip(loss_vals, img_names), reverse=True)]
+  #print(img_names)
+  #for i, elem in enumerate(sorted_data):
+  #  print('Xent loss = ', elem[0])
+  #  ski.io.imshow(os.path.join(save_dir, elem[1] + '_errors.png'))
+  #  ski.io.show()
 
   print('')
   pixel_acc, iou_acc, recall, precision, _ = eval_helper.compute_errors(

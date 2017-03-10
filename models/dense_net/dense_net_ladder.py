@@ -7,11 +7,13 @@ import cv2
 import tensorflow.contrib.layers as layers
 from tensorflow.contrib.framework import arg_scope
 
+import libs.cylib as cylib
 import train_helper
 import losses
 import eval_helper
 import datasets.reader_rgb as reader
 #import datasets.reader as reader
+from datasets.cityscapes.cityscapes import CityscapesDataset
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -49,8 +51,8 @@ k = 32
 compression = 0.5
 
 
-km = 256
-#km = 512
+#km = 256
+km = 512
 # works the same as 256
 #km = 128
 #km = 512
@@ -62,6 +64,8 @@ fused_batch_norm = True
 data_format = 'NCHW'
 maps_dim = 1
 height_dim = 2
+
+train_loss_sum = 0
 
 #fused_batch_norm = False
 #data_format = 'NHWC'
@@ -98,13 +102,40 @@ def evaluate(name, sess, epoch_num, run_ops, dataset, data):
   return is_best
 
 
+def start_epoch(train_data):
+  global train_loss_arr, train_conf_mat
+  train_conf_mat = np.ascontiguousarray(
+      np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64))
+  train_loss_arr = []
+  train_data['lr'].append(lr.eval())
+
+def end_epoch(train_data):
+  pixacc, iou, _, _, _ = eval_helper.compute_errors(
+      train_conf_mat, 'Train', CityscapesDataset.CLASS_INFO)
+  train_data['iou'].append(iou)
+  train_data['acc'].append(pixacc)
+  train_loss_val = np.mean(train_loss_arr)
+  train_data['loss'].append(train_loss_val)
+
+
+def update_stats(ret_val):
+  global train_loss_arr
+  loss_val = ret_val[0]
+  yp = ret_val[1]
+  yt = ret_val[2]
+  train_loss_arr.append(loss_val)
+  yp = yp.argmax(3).astype(np.int32)
+  cylib.collect_confusion_matrix(yp.reshape(-1), yt.reshape(-1), train_conf_mat)
+
+
 def plot_results(train_data, valid_data):
   eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'),
                                      train_data, valid_data)
 
 
-def print_results(data):
-  print('Best validation IOU = %.2f (epoch %d)' % tuple(data['best_iou']))
+def print_results(train_data, valid_data):
+  print('Best train IOU = %.2f' % max(train_data['iou']))
+  print('Best validation IOU = %.2f (epoch %d)' % tuple(valid_data['best_iou']))
 
 
 def init_eval_data():
@@ -279,7 +310,7 @@ def transition(net, compression, name, stride=2):
 
 
 
-def _build_small(image, depth, is_training=False):
+def _build(image, depth, is_training=False):
   #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
   bn_params['is_training'] = is_training
   with arg_scope([layers.conv2d],
@@ -382,7 +413,6 @@ def _build_small(image, depth, is_training=False):
       else:
         print('3x3')
         net, _ = BNReluConv(net, context_size, 'conv1', k=3)
-
 
       net = tf.contrib.layers.batch_norm(net, **bn_params)
       net = tf.nn.relu(net)
@@ -525,10 +555,12 @@ def build(dataset, is_training, reuse=False):
       init_op, init_feed = create_init_op(init_map)
     else:
       init_op, init_feed = None, None
+
+    run_ops = [total_loss, logits, labels, img_names]
     if is_training:
-      return [total_loss], init_op, init_feed
+      return run_ops, init_op, init_feed
     else:
-      return [total_loss, logits, labels, img_names]
+      return run_ops
 
 def _multiloss(logits, mid_logits, labels, weights, is_training=True):
   loss1 = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=10)
@@ -619,7 +651,7 @@ def num_batches(dataset):
 
 
 
-def _build(image, depth, is_training=False):
+def _build_2gpu(image, depth, is_training=False):
   #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
   bn_params['is_training'] = is_training
   with arg_scope([layers.conv2d],
