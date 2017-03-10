@@ -76,6 +76,21 @@ def weighted_cross_entropy_loss(logits, labels, weights=None, max_weight=100):
     return xent
 
 
+def cross_entropy_loss(logits, labels, weights, num_labels):
+  print('loss: cross-entropy')
+  num_pixels = -1
+  with tf.name_scope(None, 'CrossEntropyLoss', [logits, labels, num_labels]):
+    labels = tf.reshape(labels, shape=[num_pixels])
+    onehot_labels = tf.one_hot(labels, FLAGS.num_classes)
+    logits = tf.reshape(logits, [num_pixels, FLAGS.num_classes])
+    xent = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=onehot_labels)
+    weights = tf.reshape(weights, shape=[num_pixels])
+    xent = tf.multiply(weights, xent)
+    xent = tf.reduce_sum(xent) / tf.reduce_sum(num_labels)
+    print(xent)
+    return xent
+
+
 def mse(yp, yt):
   num_examples = FLAGS.batch_size * FLAGS.img_height * FLAGS.img_width
   with tf.name_scope('MeanSquareError'):

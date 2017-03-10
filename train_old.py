@@ -10,6 +10,7 @@ from tensorflow.python.client import timeline
 
 import helper
 import train_helper
+from datasets.cityscapes.cityscapes import CityscapesDataset
 
 np.set_printoptions(linewidth=250)
 
@@ -20,10 +21,12 @@ helper.import_module('config', FLAGS.config_path)
 print(FLAGS.config_path)
 
 
-def train(model):
+def train(model, train_dataset, valid_dataset):
   """ Trains the network
     Args:
       model: module containing model architecture
+      train_dataset: training data object
+      valid_dataset: validation data object
   """
   config = tf.ConfigProto(log_device_placement=FLAGS.log_device_placement)
   #config.operation_timeout_in_ms = 5000   # terminate on long hangs
@@ -35,15 +38,19 @@ def train(model):
                                   trainable=False)
 
     # Build a Graph that computes the logits predictions from the inference model.
-    train_ops, init_op, init_feed = model.build('train')
-    valid_ops = model.build('validation')
+    train_ops, init_op, init_feed = model.build(train_dataset, is_training=True)
+    valid_ops = model.build(valid_dataset, is_training=False, reuse=True)
     loss = train_ops[0]
 
-    num_batches = model.num_batches()
+    num_batches = model.num_batches(train_dataset)
     train_op = model.minimize(loss, global_step, num_batches)
+
+    #grads = opt.compute_gradients(loss)
+    #train_op = opt.apply_gradients(grads, global_step=global_step)
 
     # Create a saver.
     saver = tf.train.Saver(tf.global_variables(), max_to_keep=FLAGS.max_epochs)
+    #saver = tf.train.Saver(tf.all_variables())
 
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
@@ -80,7 +87,7 @@ def train(model):
     for epoch_num in range(1, FLAGS.max_epochs + 1):
       print('\nnvim ' + FLAGS.train_dir + 'model.py')
       print('tensorboard --logdir=' + FLAGS.train_dir + '\n')
-      num_batches = model.num_batches() // FLAGS.num_validations_per_epoch
+      num_batches = model.num_batches(train_dataset) // FLAGS.num_validations_per_epoch
       model.start_epoch(train_data)
       #for step in range(40):
       for step in range(num_batches):
@@ -132,12 +139,16 @@ def train(model):
             (%.1f examples/sec; %.3f sec/batch)'
           #print('lr = ', clr)
           print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num,
-                              step, model.num_batches(), loss_val,
+                              step, model.num_batches(train_dataset), loss_val,
                               examples_per_sec, sec_per_batch))
       model.end_epoch(train_data)
       #train_helper.print_variable_diff(sess, init_vars)
-      is_best = model.evaluate('valid', sess, epoch_num, valid_ops, valid_data)
+      is_best = model.evaluate('valid', sess, epoch_num, valid_ops, valid_dataset, valid_data)
       model.print_results(train_data, valid_data)
+
+      #valid_loss, valid_pixacc, valid_iou, valid_recall, valid_precision = evaluate(
+      #  sess, epoch_num, logits_valid, loss_valid,
+      #  labels_valid, img_name_valid, valid_dataset, reader)
 
       model.plot_results(train_data, valid_data)
       #  eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'), plot_data)
@@ -174,7 +185,9 @@ def main(argv=None):  # pylint: disable=unused-argument
 
   print('Experiment dir: ' + FLAGS.train_dir)
   print('Dataset dir: ' + FLAGS.dataset_dir)
-  train(model)
+  train_dataset = CityscapesDataset(FLAGS.dataset_dir, 'train')
+  valid_dataset = CityscapesDataset(FLAGS.dataset_dir, 'val')
+  train(model, train_dataset, valid_dataset)
 
 
 if __name__ == '__main__':

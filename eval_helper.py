@@ -110,6 +110,50 @@ def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=
     proc_status = subprocess.Popen(cmd, shell=True)
   return loss_avg / num_examples, pixel_acc, iou_acc, recall, precision
 
+
+def evaluate_segmentation(sess, epoch_num, run_ops, dataset, get_feed_dict=None):
+  assert dataset.num_examples() % FLAGS.batch_size_valid == 0
+  num_batches = dataset.num_examples() // FLAGS.batch_size_valid
+  print('\nValidation performance:')
+  conf_mat = np.ascontiguousarray(
+      np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64))
+  loss_avg = 0
+  for step in range(num_batches):
+    start_time = time.time()
+    loss, logits, labels, img_names = sess.run(run_ops)
+    duration = time.time() - start_time
+    loss_avg += loss
+    net_labels = logits.argmax(3).astype(np.int32)
+    cylib.collect_confusion_matrix(net_labels.reshape(-1),
+                                   labels.reshape(-1), conf_mat)
+    if step % 50 == 0:
+      num_examples_per_step = FLAGS.batch_size
+      examples_per_sec = num_examples_per_step / duration
+      sec_per_batch = float(duration)
+      format_str = 'epoch %d, step %d / %d, loss = %.2f \
+        (%.1f examples/sec; %.3f sec/batch)'
+      print(format_str % (epoch_num, step, num_batches-1, loss,
+                          examples_per_sec, sec_per_batch))
+
+    if FLAGS.draw_predictions and step % 20 == 0:
+    #if FLAGS.draw_predictions:
+      for i in range(net_labels.shape[0]):
+        img_prefix = img_names[i].decode("utf-8")
+        #save_path = FLAGS.debug_dir + '/valid/' + '%03d_' % epoch_num + img_prefix + '.png'
+        save_path = FLAGS.debug_dir + '/valid/' + img_prefix + '.png'
+        draw_output(net_labels[i], CityscapesDataset.CLASS_INFO, save_path)
+        #mid_labels = logits_mid[i].argmax(2).astype(np.int32)
+        #save_path = FLAGS.debug_dir + '/valid/' + '%03d_' % epoch_num + img_prefix + '_mid.png'
+        #save_path = FLAGS.debug_dir + '/valid/' + img_prefix + '_mid.png'
+        #draw_output(mid_labels, CityscapesDataset.CLASS_INFO, save_path)
+
+  print('')
+  pixel_acc, iou_acc, recall, precision, _ = compute_errors(
+      conf_mat, 'Validation', dataset.class_info, verbose=True)
+
+  return loss_avg / num_batches, pixel_acc, iou_acc, recall, precision
+
+
 def evaluate_depth_prediction(name, sess, epoch_num, run_ops, num_examples):
   print('\nValidation performance:')
   loss_avg = 0
