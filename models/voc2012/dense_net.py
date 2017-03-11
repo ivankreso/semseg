@@ -28,8 +28,8 @@ model_depth = 121
 imagenet_init = True
 #imagenet_init = False
 init_dir = '/home/kivan/datasets/pretrained/dense_net/'
-#apply_jitter = True
-apply_jitter = False
+apply_jitter = True
+#apply_jitter = False
 pool_func = layers.avg_pool2d
 #pool_func = layers.max_pool2d
 
@@ -297,8 +297,9 @@ def dense_block_upsample_new(net, size, growth, name):
 #up_sizes = [256,256,512,512]
 #up_sizes = [196,256,384,512]
 #up_sizes = [256,256,384,512]
-up_sizes = [128,128,256,256]
+#up_sizes = [128,128,256,256]
 #up_sizes = [128,128,256,512] # 2gpus
+up_sizes = [128,128,256,384,512]
 def dense_block_upsample(net, skip_net, size, growth, name):
   with tf.variable_scope(name):
     net = tf.concat([net, skip_net], maps_dim)
@@ -372,14 +373,12 @@ def _build(image, is_training=False):
       weights_initializer=init_func, biases_initializer=None,
       weights_regularizer=layers.l2_regularizer(weight_decay)):
     with tf.variable_scope('conv0'):
-      net = layers.conv2d(image, 2*growth, 7, stride=2)
-      #net = layers.conv2d(image, 2*growth, 7, stride=1)
+      #net = layers.conv2d(image, 2*growth, 7, stride=2)
+      net = layers.conv2d(image, 2*growth, 7, stride=1)
       # TODO
       net = tf.contrib.layers.batch_norm(net, **bn_params)
       net = tf.nn.relu(net)
 
-    #net = layers.max_pool2d(net, 2, stride=2, padding='SAME',
-    #                        data_format=data_format, scope='pool0')
     net = layers.max_pool2d(net, 2, stride=2, padding='SAME',
                             data_format=data_format, scope='pool0')
 
@@ -411,15 +410,20 @@ def _build(image, is_training=False):
     #skip_layers.append([net, km, 'block2', depth])
     net, skip = transition(net, compression, 'block2/transition')
     #skip_layers.append([skip, 4, k_up, 'block2_refine', depth])
-    net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
-    #net, skip = dense_block(net, block_sizes[3], k, 'block3', is_training, split=True)
-    #skip_layers.append([skip, km, 'block3', depth])
+    #net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
+    net, skip = dense_block(net, block_sizes[3], growth, 'block3', is_training, split=True)
+    skip_layers.append([skip, up_sizes[4], growth_up, 'block3_refine'])
 
     with tf.variable_scope('head'):
-      print('5x5')
-      net = BNReluConv(net, context_size, 'context_conv', k=5)
-      #print('7x7')
-      #net = BNReluConv(net, context_size, 'context_conv', k=7)
+      final_h = net.get_shape().as_list()[height_dim]
+      if final_h >= 7:
+        print('7x7')
+        net = BNReluConv(net, context_size, 'context_conv', k=7)
+      elif final_h >= 5:
+        print('5x5')
+        net = BNReluConv(net, context_size, 'context_conv', k=5)
+      else:
+        raise 1
       print('Before upsampling: ', net)
       mid_logits = net
 

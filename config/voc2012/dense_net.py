@@ -12,8 +12,8 @@ IMG_HEIGHT, IMG_WIDTH = 500, 500
 # 1e-3 best, 1e-2 is too big
 # best = 6
 tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
-#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
-tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
+tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
 
 tf.app.flags.DEFINE_integer('batch_size', 5, '')
 tf.app.flags.DEFINE_integer('batch_size_valid', 3, '')

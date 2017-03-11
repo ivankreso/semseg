@@ -310,8 +310,11 @@ def dense_block_upsample_new(net, size, growth, name):
 #up_sizes = [256,256,512,512]
 #up_sizes = [196,256,384,512]
 #up_sizes = [256,256,384,512]
-up_sizes = [128,128,256,256]
+#up_sizes = [128,128,256,256]
 #up_sizes = [128,128,256,512] # 2gpus
+#up_sizes = [128,256,384,512] # 2gpus
+#up_sizes = [128,256,384,512] # 2gpus
+up_sizes = [128,128,256,384,512] # 2gpus
 def dense_block_upsample(net, skip_net, depth, size, growth, name):
   with tf.variable_scope(name):
     #net = tf.concat([net, skip_net], maps_dim)
@@ -376,7 +379,7 @@ def transition(net, compression, name, stride=2):
   return net, skip_layer
 
 
-def _build(image, depth, is_training=False):
+def _buildsingle(image, depth, is_training=False):
   #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
   bn_params['is_training'] = is_training
   with arg_scope([layers.conv2d],
@@ -465,7 +468,7 @@ def _build(image, depth, is_training=False):
     #  top_layer = tf.transpose(top_layer, perm=[0,3,1,2])
     return logits, mid_logits
 
-def _build2gpu(image, depth, is_training=False):
+def _build(image, depth, is_training=False):
   #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
   bn_params['is_training'] = is_training
   with arg_scope([layers.conv2d],
@@ -523,9 +526,9 @@ def _build2gpu(image, depth, is_training=False):
       #skip_layers.append([net, km, 'block2', depth])
       net, skip = transition(net, compression, 'block2/transition')
       #skip_layers.append([skip, 4, k_up, 'block2_refine', depth])
-      net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
-      #net, skip = dense_block(net, block_sizes[3], k, 'block3', is_training, split=True)
-      #skip_layers.append([skip, km, 'block3', depth])
+      #net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
+      net, skip = dense_block(net, block_sizes[3], growth, 'block3', is_training, split=True)
+      skip_layers.append([skip, up_sizes[4], growth_up, 'block3_refine', depth])
 
       with tf.variable_scope('head'):
         #print('5x5')
@@ -598,21 +601,22 @@ def jitter(image, labels, weights, depth):
     resize_width = tf.placeholder(tf.int32, shape=(), name='resize_width')
     resize_height = tf.placeholder(tf.int32, shape=(), name='resize_height')
     
-    image_split = tf.unstack(image, axis=0)
-    depth_split = tf.unstack(depth, axis=0)
-    weights_split = tf.unstack(weights, axis=0)
-    labels_split = tf.unstack(labels, axis=0)
+    #image_split = tf.unstack(image, axis=0)
+    #depth_split = tf.unstack(depth, axis=0)
+    #weights_split = tf.unstack(weights, axis=0)
+    #labels_split = tf.unstack(labels, axis=0)
     out_img = []
     out_depth = []
     out_weights = []
     out_labels = []
     for i in range(FLAGS.batch_size):
       out_img.append(tf.cond(random_flip_tf[i],
-        lambda: tf.image.flip_left_right(image_split[i]),
-        lambda: image_split[i]))
+        lambda: tf.image.flip_left_right(image[i]), lambda: image[i]))
+        #lambda: tf.image.flip_left_right(image_split[i]),
+        #lambda: image_split[i]))
       out_depth.append(tf.cond(random_flip_tf[i],
-        lambda: tf.image.flip_left_right(depth_split[i]),
-        lambda: depth_split[i]))
+        lambda: tf.image.flip_left_right(depth[i]),
+        lambda: depth[i]))
       #print(cond_op)
       #image_split[i] = tf.assign(image_split[i], cond_op)
       #image[i] = tf.cond(random_flip_tf, lambda: tf.image.flip_left_right(image[i]),
@@ -683,9 +687,8 @@ def build(dataset, is_training, reuse=False):
       return run_ops
 
 def _multiloss(logits, mid_logits, labels, weights, is_training=True):
-
-  #max_weight = 10
-  max_weight = 20
+  max_weight = 10
+  #max_weight = 20
   loss1 = losses.weighted_cross_entropy_loss(logits, labels, weights,
       max_weight=max_weight)
   loss2 = losses.weighted_cross_entropy_loss(mid_logits, labels, weights,
