@@ -111,7 +111,7 @@ def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=
   return loss_avg / num_examples, pixel_acc, iou_acc, recall, precision
 
 
-def evaluate_segmentation(sess, epoch_num, run_ops, dataset, get_feed_dict=None):
+def evaluate_segmentation_voc2012(sess, epoch_num, run_ops, dataset, get_feed_dict=None):
   assert dataset.num_examples() % FLAGS.batch_size_valid == 0
   num_batches = dataset.num_examples() // FLAGS.batch_size_valid
   print('\nValidation performance:')

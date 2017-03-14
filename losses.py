@@ -50,20 +50,24 @@ def total_loss_sum(losses):
   return total_loss
 
 
-def weighted_cross_entropy_loss(logits, labels, weights=None, max_weight=100):
+def weighted_cross_entropy_loss(logits, labels, weights=None,
+                                num_labels=None, max_weight=100):
   print('loss: cross-entropy')
   num_pixels = -1
   with tf.name_scope(None, 'CrossEntropyLoss', [logits, labels]):
     labels = tf.reshape(labels, shape=[num_pixels])
     onehot_labels = tf.one_hot(labels, FLAGS.num_classes)
     logits = tf.reshape(logits, [num_pixels, FLAGS.num_classes])
-    num_labels = tf.reduce_sum(onehot_labels)
     xent = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=onehot_labels)
 
     print('Max weight = ', max_weight)
     weights = tf.reshape(weights, shape=[num_pixels])
     weights = tf.minimum(tf.to_float(max_weight), weights)
     wgt_sum = tf.reduce_sum(weights)
+    if num_labels is None:
+      num_labels = tf.reduce_sum(onehot_labels)
+    else:
+      num_labels = tf.reduce_sum(num_labels)
     norm_factor = num_labels / wgt_sum
     # weights need to sum to 1
     weights = tf.multiply(weights, norm_factor)

@@ -39,11 +39,15 @@ def train(model, train_dataset, valid_dataset):
 
     # Build a Graph that computes the logits predictions from the inference model.
     train_ops, init_op, init_feed = model.build(train_dataset, is_training=True)
+    num_params = train_helper.get_num_params()
+
     valid_ops = model.build(valid_dataset, is_training=False, reuse=True)
     loss = train_ops[0]
 
     num_batches = model.num_batches(train_dataset)
     train_op = model.minimize(loss, global_step, num_batches)
+
+    print('Total number of parameters = ', num_params)
 
     #grads = opt.compute_gradients(loss)
     #train_op = opt.apply_gradients(grads, global_step=global_step)
@@ -74,13 +78,11 @@ def train(model, train_dataset, valid_dataset):
     #summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, graph=sess.graph)
     #TODO tf.summary.FileWriter()
 
-    init_vars = train_helper.get_variables(sess)
+    #init_vars = train_helper.get_variables(sess)
     #train_helper.print_variable_diff(sess, init_vars)
-    variable_map = train_helper.get_variable_map()
-    num_params = train_helper.get_num_params()
-    print('Number of parameters = ', num_params)
+    #variable_map = train_helper.get_variable_map()
     # take the train loss moving average
-    loss_avg_train = variable_map['total_loss/avg:0']
+    #loss_avg_train = variable_map['total_loss/avg:0']
     train_loss_val = 0
     train_data, valid_data = model.init_eval_data()
     ex_start_time = time.time()
@@ -141,6 +143,10 @@ def train(model, train_dataset, valid_dataset):
           print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num,
                               step, model.num_batches(train_dataset), loss_val,
                               examples_per_sec, sec_per_batch))
+      total_num_images = (epoch_num+1) * (model.num_batches(train_dataset) * FLAGS.batch_size)
+      examples_per_sec = total_num_images / (time.time() - ex_start_time)
+      print('Average speed: %.1f examples/sec' % examples_per_sec)
+
       model.end_epoch(train_data)
       #train_helper.print_variable_diff(sess, init_vars)
       is_best = model.evaluate('valid', sess, epoch_num, valid_ops, valid_dataset, valid_data)

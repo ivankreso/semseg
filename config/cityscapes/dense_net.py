@@ -2,23 +2,23 @@ import os
 import tensorflow as tf
 import train_helper
 
-#MODEL_PATH = './models/dense_net/dense_net_ladder.py'
-MODEL_PATH = './models/dense_net/dense_net_strong_ladder.py'
-SAVE_DIR = os.path.join('/home/kivan/datasets/results/semseg',
+MODEL_PATH = './models/cityscapes/dense_net.py'
+SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/cityscapes',
                         train_helper.get_time_string())
 
 #IMG_WIDTH, IMG_HEIGHT = 1152, 1024
 #DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
-IMG_WIDTH, IMG_HEIGHT = 2048, 896
-DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024_full/'
+#IMG_WIDTH, IMG_HEIGHT = 2048, 896
+#DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024_full/'
 
 #IMG_WIDTH, IMG_HEIGHT = 640, 272
 
-#IMG_WIDTH, IMG_HEIGHT = 1024, 448
+IMG_WIDTH, IMG_HEIGHT = 1024, 448
 #IMG_WIDTH, IMG_HEIGHT = 768, 320
-#DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
-#                           '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
+DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
+                           '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
+##                           '{}x{}_jitter'.format(IMG_WIDTH, IMG_HEIGHT))
 
 #IMG_WIDTH = 384
 #IMG_HEIGHT = 164
@@ -33,9 +33,8 @@ tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
 # best 3e-4
 #tf.app.flags.DEFINE_float('initial_learning_rate', 3e-4, '')
 tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
-tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
-# 5 to small
-#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
+tf.app.flags.DEFINE_integer('num_epochs_per_decay', 4, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 3e-4, '')
 # TODO better 4?
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 13, '')

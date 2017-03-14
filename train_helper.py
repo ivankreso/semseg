@@ -85,8 +85,8 @@ def get_num_params():
   var_list = tf.global_variables()
   num_params = 0
   for var in var_list:
-    #print(var.name, var.get_shape())
     shape = var.get_shape().as_list()
+    #print(var.name, shape)
     n = 1
     for dim in shape:
       n *= dim

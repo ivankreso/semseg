@@ -28,22 +28,24 @@ def plot_training_progress(train_data, valid_data):
   ax1.set_title('loss')
   ax1.plot(x_data, train_loss, marker='o', color=train_color, linewidth=linewidth,
       linestyle='-', label='train')
-  ax1.plot(x_data, valid_loss, marker='o', color=val_color, linewidth=linewidth,
-           linestyle='-', label='validation')
-  ax1.legend(loc='upper right', fontsize=legend_size)
+  if len(valid_loss) > 0:
+    ax1.plot(x_data, valid_loss, marker='o', color=val_color, linewidth=linewidth,
+             linestyle='-', label='validation')
+    ax1.legend(loc='upper right', fontsize=legend_size)
   ax2.set_title('IoU accuracy')
   ax2.plot(x_data, train_iou, marker='o', color=train_color, linewidth=linewidth,
            linestyle='-', label='train')
-  ax2.plot(x_data, valid_iou, marker='o', color=val_color, linewidth=linewidth,
-      linestyle='-', label='validation')
+  if len(valid_iou) > 0:
+    ax2.plot(x_data, valid_iou, marker='o', color=val_color, linewidth=linewidth,
+        linestyle='-', label='validation')
   ax2.legend(loc='upper left', fontsize=legend_size)
   ax3.set_title('pixel accuracy')
   ax3.plot(x_data, train_acc, marker='o', color=train_color, linewidth=linewidth,
            linestyle='-', label='train')
-  ax3.plot(x_data, valid_acc, marker='o', color=val_color, linewidth=linewidth,
-      linestyle='-', label='validation')
+  if len(valid_acc) > 0:
+    ax3.plot(x_data, valid_acc, marker='o', color=val_color, linewidth=linewidth,
+        linestyle='-', label='validation')
   ax3.legend(loc='upper left', fontsize=legend_size)
-
   ax4.set_title('learning rate')
   ax4.plot(x_data, lr, marker='o', color=train_color, linewidth=linewidth,
            linestyle='-', label='learning rate')

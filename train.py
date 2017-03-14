@@ -36,7 +36,8 @@ def train(model):
 
     # Build a Graph that computes the logits predictions from the inference model.
     train_ops, init_op, init_feed = model.build('train')
-    valid_ops = model.build('validation')
+    if FLAGS.no_valid is False:
+      valid_ops = model.build('validation')
     loss = train_ops[0]
 
     num_batches = model.num_batches()
@@ -114,7 +115,7 @@ def train(model):
 
         assert not np.isnan(loss_val), 'Model diverged with loss = NaN'
         # estimate training accuracy on the last 40% of the epoch
-        if step > int(0.6 * num_batches):
+        if step > int(0.5 * num_batches):
           model.update_stats(ret_val)
 
         #img_prefix = img_prefix[0].decode("utf-8")
@@ -122,7 +123,6 @@ def train(model):
         #if FLAGS.draw_predictions and step % 50 == 0:
         #  model.draw_prediction('train', epoch_num, step, ret_val)
 
-        #if step % 50 == 0:
         if step % 30 == 0:
         #if step % 1 == 0:
           examples_per_sec = FLAGS.batch_size / duration
@@ -134,11 +134,12 @@ def train(model):
           print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num,
                               step, model.num_batches(), loss_val,
                               examples_per_sec, sec_per_batch))
-      model.end_epoch(train_data)
+      is_best = model.end_epoch(train_data)
       #train_helper.print_variable_diff(sess, init_vars)
-      is_best = model.evaluate('valid', sess, epoch_num, valid_ops, valid_data)
-      model.print_results(train_data, valid_data)
+      if FLAGS.no_valid is False:
+        is_best = model.evaluate('valid', sess, epoch_num, valid_ops, valid_data)
 
+      model.print_results(train_data, valid_data)
       model.plot_results(train_data, valid_data)
       #  eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'), plot_data)
 

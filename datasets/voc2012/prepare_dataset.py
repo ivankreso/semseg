@@ -27,10 +27,12 @@ FLAGS = tf.app.flags.FLAGS
 
 flags = tf.app.flags
 flags.DEFINE_string('data_dir', '/home/kivan/datasets/VOC2012', '')
-flags.DEFINE_string('save_dir', '/home/kivan/datasets/VOC2012/tensorflow', '')
+#flags.DEFINE_string('save_dir', '/home/kivan/datasets/VOC2012/tensorflow', '')
+flags.DEFINE_string('save_dir', '/home/kivan/datasets/VOC2012/tensorflow_weights', '')
 
 FLAGS = flags.FLAGS
 
+NUM_CLASSES = 21
 
 def _int64_feature(value):
   """Wrapper for inserting int64 features into Example proto."""
@@ -71,6 +73,24 @@ def create_record(img, labels, weights, num_labels, img_name, save_dir):
 def collect_hist(labels, class_hist):
   for i in range(class_hist.shape[0]):
     class_hist[i] += np.sum(labels==i)
+
+
+def get_label_weights(labels, num_classes, max_wgt=100):
+  height = labels.shape[0]
+  width = labels.shape[1]
+  weights = np.zeros((height, width), dtype=np.float32)
+  num_labels = (labels >= 0).sum()
+  #for i in range(num_classes):
+  for cid in np.unique(labels):
+    if cid < 0:
+      continue
+    mask = labels == cid
+    class_cnt = mask.sum()
+    if class_cnt > 0:
+      wgt = min(max_wgt, 1.0 / (class_cnt / num_labels))
+      weights[mask] = wgt
+      #print(cid, wgt)
+  return weights, num_labels
 
 
 def add_padding(img, val, target_size=500):
@@ -140,9 +160,10 @@ def prepare_dataset():
     #plt.show()
     img = add_padding(img, 0)
     labels = add_padding(labels, -1)
-    label_mask = labels >= 0
-    num_labels = np.sum(label_mask)
-    weights = label_mask.astype(np.float32)
+    #label_mask = labels >= 0
+    #num_labels = np.sum(label_mask)
+    #weights = label_mask.astype(np.float32)
+    weights, num_labels = get_label_weights(labels, NUM_CLASSES)
     create_record(img, labels, weights, num_labels, img_name, save_dir)
   #print(class_hist/ class_hist.sum())
 
