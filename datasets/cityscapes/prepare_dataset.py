@@ -19,6 +19,8 @@ tf.app.flags.DEFINE_string('data_dir',
     '/home/kivan/datasets/Cityscapes/2048x1024/', 'Dataset dir')
 tf.app.flags.DEFINE_string('gt_dir',
     '/home/kivan/datasets/Cityscapes/orig/gtFine/', '')
+tf.app.flags.DEFINE_integer('num_classes', 19, '')
+
 #tf.app.flags.DEFINE_integer('img_width', 320, '')
 #tf.app.flags.DEFINE_integer('img_height', 144, '')
 #tf.app.flags.DEFINE_integer('img_width', 1024, '')
@@ -55,7 +57,7 @@ tf.app.flags.DEFINE_boolean('downsample', True, '')
 
 tf.app.flags.DEFINE_string('save_dir',
     '/home/kivan/datasets/Cityscapes/tensorflow/' +
-    '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '/', '')
+    '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '_new/', '')
     #'{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '_rgbd/', '')
 
 def _int64_feature(value):
@@ -70,28 +72,28 @@ def _bytes_feature(value):
   return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
-def create_tfrecord(rgb, label_map, weight_map, depth_img,
+def create_tfrecord(img, label_map, class_hist, depth_img,
                     num_labels, img_name, save_dir):
-  rows = rgb.shape[0]
-  cols = rgb.shape[1]
-  depth = rgb.shape[2]
+  height = img.shape[0]
+  width = img.shape[1]
+  channels = img.shape[2]
 
   filename = join(save_dir + img_name + '.tfrecords')
   writer = tf.python_io.TFRecordWriter(filename)
-  rgb_str = rgb.tostring()
+  img_str = img.tostring()
   labels_str = label_map.tostring()
-  weights_str = weight_map.tostring()
-  disp_raw = depth_img.tostring()
+  class_hist_str = class_hist.tostring()
+  depth_raw = depth_img.tostring()
   example = tf.train.Example(features=tf.train.Features(feature={
-      'height': _int64_feature(rows),
-      'width': _int64_feature(cols),
-      'depth': _int64_feature(depth),
+      'height': _int64_feature(height),
+      'width': _int64_feature(width),
+      'channels': _int64_feature(channels),
       'num_labels': _int64_feature(int(num_labels)),
       'img_name': _bytes_feature(img_name.encode()),
-      'rgb': _bytes_feature(rgb_str),
-      'label_weights': _bytes_feature(weights_str),
+      'image': _bytes_feature(img_str),
+      'class_hist': _bytes_feature(class_hist_str),
       'labels': _bytes_feature(labels_str),
-      'disparity': _bytes_feature(disp_raw)
+      'depth': _bytes_feature(depth_raw)
       }))
   writer.write(example.SerializeToString())
   writer.close()
@@ -154,28 +156,30 @@ def prepare_dataset(name):
       if FLAGS.downsample:
         full_gt_img = ski.transform.resize(full_gt_img, (FLAGS.img_height, FLAGS.img_width),
                                            order=0, preserve_range=True).astype(np.uint8)
-      instance_gt_path = join(gt_dir, city, img_name[:-4] + '_gtFine_instanceIds.png')
-      instance_gt_img = ski.data.load(instance_gt_path)
-      instance_gt_img = np.ascontiguousarray(instance_gt_img[cy_start:cy_end,cx_start:cx_end])
-      if FLAGS.downsample:
-        instance_gt_img = ski.transform.resize(
-            instance_gt_img, (FLAGS.img_height, FLAGS.img_width),
-            order=0, preserve_range=True).astype(np.uint16)
       gt_img = data_utils.convert_ids(full_gt_img)
       #print(gt_img[40:60,100:110])
       #gt_weights = gt_data[1]
       gt_img = gt_img.astype(np.int8)
-      #print((gt_img == -1).sum())
-      gt_weights, num_labels = data_utils.get_class_weights(gt_img)
+      gt_img[gt_img == -1] = FLAGS.num_classes
+      #gt_weights, num_labels = data_utils.get_class_weights(gt_img)
+      class_hist, num_labels = data_utils.get_class_hist(gt_img, FLAGS.num_classes)
 
       # Just to test correct casting in numpy/skimage - this must be the same
       #gt_ids_test = ski.util.img_as_ubyte(gt_ids_test).astype(np.int8)
       #assert (gt_ids != gt_ids_test).sum() == 0
 
-      ski.io.imsave(join(gt_save_dir, 'label', img_name[:-4]+'.png'), full_gt_img)
-      ski.io.imsave(join(gt_save_dir, 'instance', img_name[:-4]+'.png'), instance_gt_img)
-      #convert_colors_to_indices(gt_rgb, class_color_map)
-      create_tfrecord(rgb, gt_img, gt_weights, depth_img,
+      if name == 'val':
+        instance_gt_path = join(gt_dir, city, img_name[:-4] + '_gtFine_instanceIds.png')
+        instance_gt_img = ski.data.load(instance_gt_path)
+        instance_gt_img = np.ascontiguousarray(instance_gt_img[cy_start:cy_end,cx_start:cx_end])
+        if FLAGS.downsample:
+          instance_gt_img = ski.transform.resize(
+              instance_gt_img, (FLAGS.img_height, FLAGS.img_width),
+              order=0, preserve_range=True).astype(np.uint16)
+        ski.io.imsave(join(gt_save_dir, 'label', img_name[:-4]+'.png'), full_gt_img)
+        ski.io.imsave(join(gt_save_dir, 'instance', img_name[:-4]+'.png'), instance_gt_img)
+
+      create_tfrecord(rgb, gt_img, class_hist, depth_img,
                       num_labels, img_prefix, save_dir)
 
 

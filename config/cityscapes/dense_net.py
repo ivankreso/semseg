@@ -3,6 +3,7 @@ import tensorflow as tf
 import train_helper
 
 MODEL_PATH = './models/cityscapes/dense_net.py'
+#MODEL_PATH = './models/cityscapes/dense_net_dilated.py'
 SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/cityscapes',
                         train_helper.get_time_string())
 
@@ -14,8 +15,8 @@ SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/cityscapes',
 
 #IMG_WIDTH, IMG_HEIGHT = 640, 272
 
-IMG_WIDTH, IMG_HEIGHT = 1024, 448
-#IMG_WIDTH, IMG_HEIGHT = 768, 320
+#IMG_WIDTH, IMG_HEIGHT = 1024, 448
+IMG_WIDTH, IMG_HEIGHT = 768, 320
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
                            '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 ##                           '{}x{}_jitter'.format(IMG_WIDTH, IMG_HEIGHT))
@@ -33,8 +34,11 @@ tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
 # best 3e-4
 #tf.app.flags.DEFINE_float('initial_learning_rate', 3e-4, '')
 tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
-#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
-tf.app.flags.DEFINE_integer('num_epochs_per_decay', 4, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 4, '')
+tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
+#tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 3, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 7, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 3e-4, '')
 # TODO better 4?
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 13, '')

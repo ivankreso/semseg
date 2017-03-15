@@ -50,7 +50,41 @@ def total_loss_sum(losses):
   return total_loss
 
 
-def weighted_cross_entropy_loss(logits, labels, weights=None,
+def weighted_cross_entropy_loss(logits, labels, num_labels, class_hist, max_weight=10):
+  print('loss: cross-entropy')
+  print('Using balanced loss with max weight = ', max_weight)
+  num_pixels = -1
+  with tf.name_scope(None, 'CrossEntropyLoss', [logits, labels]):
+    labels = tf.reshape(labels, shape=[num_pixels])
+    onehot_labels = tf.one_hot(labels, FLAGS.num_classes)
+    logits = tf.reshape(logits, [num_pixels, FLAGS.num_classes])
+    xent = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=onehot_labels)
+
+    num_labels = tf.to_float(tf.reduce_sum(num_labels))
+    class_hist = tf.to_float(tf.reduce_sum(class_hist, axis=0))
+
+    #class_hist = tf.Print(class_hist, [class_hist], 'hist = ', summarize=30)
+    class_weights = num_labels / class_hist
+    #class_weights = tf.Print(class_weights, [class_weights], 'wgt hist = ', summarize=30)
+    class_weights = tf.concat([class_weights, [0]], axis=0)
+    #class_weights = tf.Print(class_weights, [class_weights], 'wgt hist = ', summarize=30)
+    class_weights = tf.minimum(tf.to_float(max_weight), class_weights)
+    weights = tf.gather(class_weights, labels)
+    wgt_sum = tf.reduce_sum(weights)
+
+    if max_weight > 1:
+      norm_factor = num_labels / wgt_sum
+      # weights need to sum to 1
+      weights = tf.multiply(weights, norm_factor)
+
+    xent = tf.multiply(weights, xent)
+    #num_labels = tf.Print(num_labels, [num_labels, wgt_sum], 'num_labels = ')
+    #xent = tf.Print(xent, [xent], 'num_labels = ')
+    xent = tf.reduce_sum(xent) / num_labels
+    return xent
+
+
+def weighted_cross_entropy_loss_baad(logits, labels, weights=None,
                                 num_labels=None, max_weight=100):
   print('loss: cross-entropy')
   num_pixels = -1
@@ -60,14 +94,15 @@ def weighted_cross_entropy_loss(logits, labels, weights=None,
     logits = tf.reshape(logits, [num_pixels, FLAGS.num_classes])
     xent = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=onehot_labels)
 
-    print('Max weight = ', max_weight)
-    weights = tf.reshape(weights, shape=[num_pixels])
-    weights = tf.minimum(tf.to_float(max_weight), weights)
-    wgt_sum = tf.reduce_sum(weights)
     if num_labels is None:
       num_labels = tf.reduce_sum(onehot_labels)
     else:
       num_labels = tf.reduce_sum(num_labels)
+
+    print('Using balanced loss with max weight = ', max_weight)
+    weights = tf.reshape(weights, shape=[num_pixels])
+    weights = tf.minimum(tf.to_float(max_weight), weights)
+    wgt_sum = tf.reduce_sum(weights)
     norm_factor = num_labels / wgt_sum
     # weights need to sum to 1
     weights = tf.multiply(weights, norm_factor)

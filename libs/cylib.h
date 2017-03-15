@@ -7,8 +7,9 @@
 
 void add_confusion_matrix(int* y, int* yt, int size, uint64_t* matrix, int num_classes) {
   for (int i = 0; i < size; i++) {
-    if (yt[i] >= 0) {
-      matrix[y[i]*num_classes + yt[i]] += 1;
+    int target = yt[i];
+    if (target >= 0 && target < num_classes) {
+      matrix[y[i]*num_classes + target] += 1;
     }
   }
 }

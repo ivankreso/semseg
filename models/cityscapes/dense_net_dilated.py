@@ -70,14 +70,12 @@ use_dropout = False
 keep_prob = 0.8
 
 fused_batch_norm = True
-data_format = 'NCHW'
-maps_dim = 1
-height_dim = 2
-
-#fused_batch_norm = False
-#data_format = 'NHWC'
-#maps_dim = 3
-#height_dim = 1
+#data_format = 'NCHW'
+#maps_dim = 1
+#height_dim = 2
+data_format = 'NHWC'
+maps_dim = 3
+height_dim = 1
 
 
 bn_params = {
@@ -190,6 +188,8 @@ def resize_tensor(net, shape, name):
     net = tf.transpose(net, perm=[0,3,1,2])
   return net
 
+def image_size(net):
+  return net.get_shape().as_list()[height_dim:height_dim+2]
 
 def refine(net, skip_data):
   print(skip_data)
@@ -378,25 +378,32 @@ def _build(image, depth, is_training=False):
     net = dense_block(net, block_sizes[0], growth, 'block0', is_training, first=True)
     #net, skip = dense_block(net, block_sizes[0], growth, 'block0', is_training,
     #    first=True, split=True)
-    #skip_layers.append([skip, 64, growth_up, 'block0_mid_refine', depth])
-
-    skip_layers.append([net, up_sizes[0], growth_up, 'block0_refine', depth])
+    #skip_layers.append([skip, 256, growth_up, 'block0_mid_refine', depth])
+    #skip_layers.append([net, up_sizes[0], growth_up, 'block0_refine', depth])
     net, skip = transition(net, compression, 'block0/transition')
     #skip_layers.append([skip, up_sizes[0], growth_up, 'block0_refine', depth])
 
     net = dense_block(net, block_sizes[1], growth, 'block1', is_training)
-    skip_layers.append([net, up_sizes[1], growth_up, 'block1_refine', depth])
+    #skip_layers.append([net, up_sizes[1], growth_up, 'block1_refine', depth])
     #net, skip = dense_block(net, block_sizes[1], k, 'block1', is_training, split=True)
-    net, skip = transition(net, compression, 'block1/transition')
+    net, _ = transition(net, compression, 'block1/transition', stride=1)
     #skip_layers.append([skip, up_sizes[1], growth_up, 'block1_refine', depth])
 
+    bsz = 2
+    paddings, crops = tf.required_space_to_batch_paddings(image_size(net), [bsz, bsz])
+    net = tf.space_to_batch(net, paddings=paddings, block_size=bsz)
     # works the same with split, not 100%
     #net, skip = dense_block(net, block_sizes[2], growth, 'block2', is_training, split=True)
     #skip_layers.append([skip, up_sizes[2], growth_up, 'block2_mid_refine', depth])
     net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
-    skip_layers.append([net, up_sizes[3], growth_up, 'block2_refine', depth])
+    #skip_layers.append([net, up_sizes[3], growth_up, 'block2_refine', depth])
+    net, _ = transition(net, compression, 'block2/transition', stride=1)
+    net = tf.batch_to_space(net, crops=crops, block_size=bsz)
+    mid_logits = net
 
-    net, skip = transition(net, compression, 'block2/transition')
+    bsz = 4
+    paddings, crops = tf.required_space_to_batch_paddings(image_size(net), [bsz, bsz])
+    net = tf.space_to_batch(net, paddings=paddings, block_size=bsz)
     #skip_layers.append([skip, up_sizes[3], growth_up, 'block2_refine', depth])
     net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
     #net, skip = dense_block(net, block_sizes[3], k, 'block3', is_training, split=True)
@@ -413,13 +420,9 @@ def _build(image, depth, is_training=False):
       #net = BNReluConv(net, context_size, 'context_conv2', k=3)
       #net = BNReluConv(net, context_size, 'context_conv3', k=3)
       #net = pyramid_pooling(net)
-      print('Before upsampling: ', net)
-      mid_logits = net
+      net = tf.batch_to_space(net, crops=crops, block_size=bsz)
 
-      for skip_layer in reversed(skip_layers):
-        net = refine(net, skip_layer)
-        print('after upsampling = ', net)
-
+  print('Final shape: ', net)
   with tf.variable_scope('head'):
     with tf.variable_scope('logits'):
       net = tf.nn.relu(layers.batch_norm(net, **bn_params))
@@ -570,8 +573,7 @@ def create_init_op(params):
   return init_op, init_feed
 
 
-#def jitter(image, labels, weights, depth):
-def jitter(image, labels, depth):
+def jitter(image, labels, weights, depth):
   with tf.name_scope('jitter'), tf.device('/cpu:0'):
     print('\nJittering enabled')
     global random_flip_tf, resize_width, resize_height
@@ -586,7 +588,7 @@ def jitter(image, labels, depth):
     #labels_split = tf.unstack(labels, axis=0)
     out_img = []
     out_depth = []
-    #out_weights = []
+    out_weights = []
     out_labels = []
     #image = tf.Print(image, [image[0]], message='img1 = ', summarize=10)
     for i in range(FLAGS.batch_size):
@@ -606,11 +608,11 @@ def jitter(image, labels, depth):
       print(labels)
       out_labels.append(tf.cond(random_flip_tf[i], lambda: tf.image.flip_left_right(labels[i]),
                         lambda: labels[i]))
-      #out_weights.append(tf.cond(random_flip_tf[i], lambda: tf.image.flip_left_right(weights[i]),
-      #                   lambda: weights[i]))
+      out_weights.append(tf.cond(random_flip_tf[i], lambda: tf.image.flip_left_right(weights[i]),
+                         lambda: weights[i]))
     image = tf.stack(out_img, axis=0)
     depth = tf.stack(out_depth, axis=0)
-    #weights = tf.stack(out_weights, axis=0)
+    weights = tf.stack(out_weights, axis=0)
     labels = tf.stack(out_labels, axis=0)
     #image = tf.Print(image, [random_flip_tf], message='random_flip_tf = ', summarize=10)
     #image = tf.Print(image, [image[0]], message='img = ', summarize=10)
@@ -620,8 +622,7 @@ def jitter(image, labels, depth):
     #depth = tf.image.resize_bilinear(depth, [resize_height, resize_width])
     #labels = tf.image.resize_nearest_neighbor(labels, [resize_height, resize_width])
     #weights = tf.image.resize_nearest_neighbor(weights, [resize_height, resize_width])
-    #return image, labels, weights, depth
-    return image, labels, depth
+    return image, labels, weights, depth
 
 
 def _get_train_feed():
@@ -645,18 +646,16 @@ def _get_train_feed():
 
 def build(dataset, is_training, reuse=False):
   with tf.variable_scope('', reuse=reuse):
-    #x, labels, weights, depth, img_names = \
-    x, labels, num_labels, class_hist, depth, img_names = \
-        reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
+    x, labels, weights, depth, img_names = \
+      reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
     if is_training and apply_jitter:
-      x, labels, depth = jitter(x, labels, depth)
+      x, labels, weights, depth = jitter(x, labels, weights, depth)
     x, depth = normalize_input(x, depth)
 
     #logits = _build(x, depth, is_training)
     #total_loss = _loss(logits, labels, weights, is_training)
     logits, mid_logits = _build(x, depth, is_training)
-    #total_loss = _multiloss(logits, mid_logits, labels, weights, is_training)
-    total_loss = _multiloss(logits, mid_logits, labels, num_labels, class_hist, is_training)
+    total_loss = _multiloss(logits, mid_logits, labels, weights, is_training)
 
     if is_training and imagenet_init:
       init_path = init_dir + 'dense_net_' + str(model_depth) + '.pickle'
@@ -671,20 +670,13 @@ def build(dataset, is_training, reuse=False):
     else:
       return run_ops
 
-
-#def _multiloss(logits, mid_logits, labels, weights, is_training=True):
-def _multiloss(logits, mid_logits, labels, num_labels, class_hist, is_training):
-  max_weight = 1
-  #max_weight = 10
-  #max_weight = 50
-  loss1 = losses.weighted_cross_entropy_loss(
-      logits, labels, num_labels, class_hist, max_weight=max_weight)
-  loss2 = losses.weighted_cross_entropy_loss(
-      mid_logits, labels, num_labels, class_hist, max_weight=max_weight)
-  #loss1 = losses.weighted_cross_entropy_loss(logits, labels, weights,
-  #    max_weight=max_weight)
-  #loss2 = losses.weighted_cross_entropy_loss(mid_logits, labels, weights,
-  #    max_weight=max_weight)
+def _multiloss(logits, mid_logits, labels, weights, is_training=True):
+  max_weight = 10
+  #max_weight = 20
+  loss1 = losses.weighted_cross_entropy_loss(logits, labels, weights,
+      max_weight=max_weight)
+  loss2 = losses.weighted_cross_entropy_loss(mid_logits, labels, weights,
+      max_weight=max_weight)
   #wgt = 0.4
   #xent_loss = loss1 + wgt * loss2
   wgt = 0.3 # best
@@ -703,6 +695,24 @@ def _multiloss(logits, mid_logits, labels, num_labels, class_hist, is_training):
 
   return total_loss
 
+def _loss(logits, labels, weights, is_training=True):
+  #TODO
+  #xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=1)
+  xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=10)
+  #xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=20)
+  #xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=50)
+  #xent_loss = losses.weighted_cross_entropy_loss(logits, labels, weights, max_weight=100)
+  all_losses = [xent_loss]
+
+  # get losses + regularization
+  total_loss = losses.total_loss_sum(all_losses)
+
+  if is_training:
+    loss_averages_op = losses.add_loss_summaries(total_loss)
+    with tf.control_dependencies([loss_averages_op]):
+      total_loss = tf.identity(total_loss)
+
+  return total_loss
 
 
 def minimize(loss, global_step, num_batches):
@@ -718,28 +728,14 @@ def minimize(loss, global_step, num_batches):
   print('fine_lr = base_lr / ', fine_lr_div)
   #lr_fine = tf.train.exponential_decay(base_lr / 10, global_step, decay_steps,
   #lr_fine = tf.train.exponential_decay(base_lr / 20, global_step, decay_steps,
-
   lr_fine = tf.train.exponential_decay(base_lr / fine_lr_div, global_step, decay_steps,
                                   FLAGS.learning_rate_decay_factor, staircase=stairs)
   lr = tf.train.exponential_decay(base_lr, global_step, decay_steps,
                                   FLAGS.learning_rate_decay_factor, staircase=stairs)
-
-  ## TODO
-  #base_lr = 1e-3
-  #end_lr = 1e-5
-  #decay_steps = num_batches * 20
-  #lr_fine = tf.train.polynomial_decay(base_lr / fine_lr_div, global_step,
-  #                                    decay_steps, end_lr, power=1)
-  #lr = tf.train.polynomial_decay(base_lr, global_step, decay_steps, end_lr, power=1)
-
   tf.summary.scalar('learning_rate', lr)
   # adam works much better here!
   if imagenet_init:
     opts = [tf.train.AdamOptimizer(lr_fine), tf.train.AdamOptimizer(lr)]
-    # TODO
-    #eps = 1e-5
-    #opts = [tf.train.AdamOptimizer(lr_fine, epsilon=eps),
-    #        tf.train.AdamOptimizer(lr, epsilon=eps)]
     return train_helper.minimize_fine_tune(opts, loss, global_step, 'head')
   else:
     opt = tf.train.AdamOptimizer(lr)

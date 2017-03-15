@@ -59,6 +59,7 @@ def train(model, train_dataset, valid_dataset):
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
     if init_op != None:
+      print('\nInitializing from pretrained weights...')
       sess.run(init_op, feed_dict=init_feed)
 
     if len(FLAGS.resume_path) > 0:
@@ -143,10 +144,6 @@ def train(model, train_dataset, valid_dataset):
           print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num,
                               step, model.num_batches(train_dataset), loss_val,
                               examples_per_sec, sec_per_batch))
-      total_num_images = (epoch_num+1) * (model.num_batches(train_dataset) * FLAGS.batch_size)
-      examples_per_sec = total_num_images / (time.time() - ex_start_time)
-      print('Average speed: %.1f examples/sec' % examples_per_sec)
-
       model.end_epoch(train_data)
       #train_helper.print_variable_diff(sess, init_vars)
       is_best = model.evaluate('valid', sess, epoch_num, valid_ops, valid_dataset, valid_data)

@@ -9,7 +9,17 @@ def convert_ids(img):
     img_train[img==cid] = i
   return img_train
 
-def get_class_weights(gt_img, num_classes=19, max_wgt=100):
+def get_class_hist(gt_img, num_classes):
+  #hist = np.zeros(num_classes+1, dtype=np.int32)
+  hist = np.ones(num_classes, dtype=np.int32)
+  #num_labels = (gt_img >= 0).sum()
+  for i in range(num_classes):
+    mask = gt_img == i
+    hist[i] += mask.sum()
+  num_labels = (gt_img < num_classes).sum()
+  return hist, num_labels
+
+def get_class_weights_old(gt_img, num_classes=19, max_wgt=100):
   height = gt_img.shape[0]
   width = gt_img.shape[1]
   weights = np.zeros((height, width), dtype=np.float32)

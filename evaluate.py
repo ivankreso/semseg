@@ -61,13 +61,14 @@ def evaluate(model, dataset, save_dir):
   loss_vals = []
   img_names = []
   for i in trange(dataset.num_examples()):
-    loss_val, out_logits, gt_labels, img_prefix = sess.run(run_ops)
+    loss_val, out_logits, gt_labels, img_prefix, mid_logits = sess.run(run_ops)
     img_prefix = img_prefix[0].decode("utf-8")
     loss_avg += loss_val
     loss_vals += [loss_val]
     img_names += [img_prefix]
     #net_labels = out_logits[0].argmax(2).astype(np.int32, copy=False)
     net_labels = out_logits[0].argmax(2).astype(np.int32)
+    mid_labels = mid_logits[0].argmax(2).astype(np.int32)
     #gt_labels = gt_labels.astype(np.int32, copy=False)
     cylib.collect_confusion_matrix(net_labels.reshape(-1), gt_labels.reshape(-1), conf_mat)
     gt_labels = gt_labels.reshape(net_labels.shape)
@@ -78,6 +79,8 @@ def evaluate(model, dataset, save_dir):
     img_prefix = '%07d_'%num_mistakes + img_prefix
     pred_save_path = os.path.join(save_dir, img_prefix + '.png')
     eval_helper.draw_output(pred_labels, CityscapesDataset.CLASS_INFO, pred_save_path)
+    pred_save_path = os.path.join(save_dir, img_prefix + '_middle.png')
+    eval_helper.draw_output(mid_labels, CityscapesDataset.CLASS_INFO, pred_save_path)
     #error_save_path = os.path.join(save_dir, str(loss_val) + img_prefix + '_errors.png')
     filename =  img_prefix + '_' + str(loss_val) + '_error.png'
     error_save_path = os.path.join(save_dir, filename)

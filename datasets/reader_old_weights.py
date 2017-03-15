@@ -12,27 +12,28 @@ def _read_and_decode(filename_queue):
       features={
           'height': tf.FixedLenFeature([], tf.int64),
           'width': tf.FixedLenFeature([], tf.int64),
-          'channels': tf.FixedLenFeature([], tf.int64),
-          'num_labels': tf.FixedLenFeature([], tf.int64),
+          'depth': tf.FixedLenFeature([], tf.int64),
+          #'num_labels': tf.FixedLenFeature([], tf.int64),
           'img_name': tf.FixedLenFeature([], tf.string),
-          'image': tf.FixedLenFeature([], tf.string),
-          'class_hist': tf.FixedLenFeature([], tf.string),
+          'rgb': tf.FixedLenFeature([], tf.string),
+          'label_weights': tf.FixedLenFeature([], tf.string),
           'labels': tf.FixedLenFeature([], tf.string),
-          'depth': tf.FixedLenFeature([], tf.string),
+          'disparity': tf.FixedLenFeature([], tf.string),
       })
 
-  height = features['height']
-  width = features['width']
-  channels = features['channels']
-  #assert FLAGS.img_height == height
-  #assert FLAGS.img_width == width
-  #assert FLAGS.img_depth == channels
-  img_name = features['img_name']
-  num_labels = features['num_labels']
+  #labels = tf.decode_raw(features['labels'], tf.int32)
   labels = tf.to_int32(tf.decode_raw(features['labels'], tf.int8, name='decode_labels'))
-  depth = tf.to_float(tf.decode_raw(features['depth'], tf.uint8, name='decode_depth'))
-  image = tf.to_float(tf.decode_raw(features['image'], tf.uint8, name='decode_image'))
-  class_hist = tf.decode_raw(features['class_hist'], tf.int32, name='decode_weights')
+  depth = tf.to_float(tf.decode_raw(features['disparity'], tf.uint8, name='decode_depth'))
+  #image = tf.decode_raw(features['rgb'], tf.float32, name='decode_image')
+  image = tf.to_float(tf.decode_raw(features['rgb'], tf.uint8, name='decode_image'))
+  weights = tf.decode_raw(features['label_weights'], tf.float32, name='decode_weights')
+  img_name = features['img_name']
+  #width = features['width']
+  #depth = features['depth']
+  #image.set_shape([mnist.IMAGE_PIXELS])
+  #image.set_shape([height, width, depth])
+  #image.set_shape([FLAGS.img_height, FLAGS.img_width, FLAGS.img_depth])
+  #labels.set_shape([num_pixels])
 
   image = tf.reshape(image, shape=[FLAGS.img_height, FLAGS.img_width, FLAGS.img_depth])
   depth = tf.reshape(depth, shape=[FLAGS.img_height, FLAGS.img_width, 1])
@@ -40,11 +41,14 @@ def _read_and_decode(filename_queue):
   #labels = tf.reshape(labels, shape=[num_pixels])
   labels = tf.reshape(labels, shape=[FLAGS.img_height, FLAGS.img_width, 1])
   #weights = tf.reshape(weights, shape=[num_pixels])
-  #class_hist = tf.reshape(class_hist, shape=[FLAGS.img_height, FLAGS.img_width, 1])
-  class_hist = tf.reshape(class_hist, shape=[FLAGS.num_classes])
-  #image = tf.Print(image, [img_name, image[100,100,:]], message="P1: ")
+  weights = tf.reshape(weights, shape=[FLAGS.img_height, FLAGS.img_width, 1])
 
-  return image, labels, num_labels, class_hist, depth, img_name
+  #image = tf.Print(image, [img_name, image[100,100,:]], message="P1: ")
+  #image = tf.Print(image, [img_name, image[100,101,:]], message="P2: ")
+  #image = tf.Print(image, [img_name, image[100,100,:]], message="P1_N: ")
+  #image = tf.Print(image, [img_name, image[100,101,:]], message="P2_N: ")
+
+  return image, labels, weights, depth, img_name
 
 
 def num_examples(dataset):
@@ -72,19 +76,17 @@ def inputs(dataset, is_training=False, num_epochs=None):
 
   with tf.name_scope('input'), tf.device('/cpu:0'):
     filename_queue = tf.train.string_input_producer(dataset.get_filenames(), num_epochs=num_epochs,
-        #shuffle=shuffle, seed=FLAGS.seed, capacity=dataset.num_examples())
-        shuffle=shuffle, capacity=dataset.num_examples())
+        shuffle=shuffle, seed=FLAGS.seed, capacity=dataset.num_examples())
 
     #filename_queue_size = tf.Print(filename_queue.size(), [filename_queue.size()])
     #with tf.control_dependencies([filename_queue_size]):
-    #image, labels, weights, depth, img_name = _read_and_decode(filename_queue)
-    image, labels, num_labels, class_hist, depth, img_name = _read_and_decode(filename_queue)
+    image, labels, weights, depth, img_name = _read_and_decode(filename_queue)
 
     # Shuffle the examples and collect them into batch_size batches.
     # Run this in two threads to avoid being a bottleneck.
-    image, labels, num_labels, class_hist, depth, img_name = tf.train.batch(
-        [image, labels, num_labels, class_hist, depth, img_name],
-        batch_size=batch_size, num_threads=2, capacity=64)
+    image, labels, weights, depth, img_name = tf.train.batch(
+        [image, labels, weights, depth, img_name], batch_size=batch_size, num_threads=2,
+        capacity=64)
 
-    return image, labels, num_labels, class_hist, depth, img_name
+    return image, labels, weights, depth, img_name
 
