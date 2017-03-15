@@ -31,13 +31,12 @@ tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
 
 #tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
-# best 3e-4
-#tf.app.flags.DEFINE_float('initial_learning_rate', 3e-4, '')
-tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
+# best 4e-4
+#tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 4, '')
-tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
-#tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
-#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 3, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
+tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
+tf.app.flags.DEFINE_integer('num_epochs_per_decay', 4, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 7, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 3e-4, '')
 # TODO better 4?

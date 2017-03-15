@@ -90,7 +90,8 @@ def train(model, train_dataset, valid_dataset):
     for epoch_num in range(1, FLAGS.max_epochs + 1):
       print('\nnvim ' + FLAGS.train_dir + 'model.py')
       print('tensorboard --logdir=' + FLAGS.train_dir + '\n')
-      num_batches = model.num_batches(train_dataset) // FLAGS.num_validations_per_epoch
+      #num_batches = model.num_batches(train_dataset) // FLAGS.num_validations_per_epoch
+      #num_batches = model.num_batches(train_dataset)
       model.start_epoch(train_data)
       #for step in range(40):
       for step in range(num_batches):

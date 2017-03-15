@@ -391,9 +391,9 @@ def _build(image, depth, is_training=False):
     #skip_layers.append([skip, up_sizes[1], growth_up, 'block1_refine', depth])
 
     # works the same with split, not 100%
-    #net, skip = dense_block(net, block_sizes[2], growth, 'block2', is_training, split=True)
-    #skip_layers.append([skip, up_sizes[2], growth_up, 'block2_mid_refine', depth])
-    net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
+    net, skip = dense_block(net, block_sizes[2], growth, 'block2', is_training, split=True)
+    skip_layers.append([skip, up_sizes[2], growth_up, 'block2_mid_refine', depth])
+    #net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
     skip_layers.append([net, up_sizes[3], growth_up, 'block2_refine', depth])
 
     net, skip = transition(net, compression, 'block2/transition')
@@ -712,8 +712,8 @@ def minimize(loss, global_step, num_batches):
   global lr
   #base_lr = 1e-2 # for sgd
   base_lr = FLAGS.initial_learning_rate
-  stairs = True
-  #stairs = False
+  #stairs = True
+  stairs = False
   fine_lr_div = 5
   print('fine_lr = base_lr / ', fine_lr_div)
   #lr_fine = tf.train.exponential_decay(base_lr / 10, global_step, decay_steps,
@@ -731,6 +731,7 @@ def minimize(loss, global_step, num_batches):
   #lr_fine = tf.train.polynomial_decay(base_lr / fine_lr_div, global_step,
   #                                    decay_steps, end_lr, power=1)
   #lr = tf.train.polynomial_decay(base_lr, global_step, decay_steps, end_lr, power=1)
+  ##lr = tf.Print(lr, [lr], message='lr = ', summarize=10)
 
   tf.summary.scalar('learning_rate', lr)
   # adam works much better here!
@@ -763,3 +764,4 @@ def train_step(sess, run_ops):
 
 def num_batches(dataset):
   return dataset.num_examples() // FLAGS.batch_size
+  #return 1
