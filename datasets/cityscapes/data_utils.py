@@ -5,9 +5,10 @@ from cityscapes import CityscapesDataset
 def convert_ids(img):
   img_train = np.zeros_like(img)
   img_train.fill(255)
+  car_mask = img == 1
   for i, cid in enumerate(CityscapesDataset.train_ids):
     img_train[img==cid] = i
-  return img_train
+  return img_train, car_mask
 
 def get_class_hist(gt_img, num_classes):
   #hist = np.zeros(num_classes+1, dtype=np.int32)

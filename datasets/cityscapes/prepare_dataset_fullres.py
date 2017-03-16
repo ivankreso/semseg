@@ -28,7 +28,8 @@ flags.DEFINE_integer('img_height', 1024, '')
 flags.DEFINE_integer('rf_half_size', 128, '')
 flags.DEFINE_string('save_dir',
     '/home/kivan/datasets/Cityscapes/tensorflow/' + str(FLAGS.img_width) +
-    'x' + str(FLAGS.img_height) + '_full/', '')
+    'x' + str(FLAGS.img_height) + '/', '')
+tf.app.flags.DEFINE_integer('num_classes', 19, '')
 
 #flags.DEFINE_integer('cx_start', 0, '')
 #flags.DEFINE_integer('cx_end', 2048, '')
@@ -52,6 +53,9 @@ def crop_data(img):
   img = np.ascontiguousarray(img[FLAGS.cy_start:FLAGS.cy_end,...])
   return [img]
 
+#def crop_data(img):
+#  return [img]
+
 
 def _int64_feature(value):
   """Wrapper for inserting int64 features into Example proto."""
@@ -65,27 +69,28 @@ def _bytes_feature(value):
   return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
-def create_tfrecord(rgb, label_map, weight_map, depth_img, num_labels, img_name, save_dir):
-  rows = rgb.shape[0]
-  cols = rgb.shape[1]
-  depth = rgb.shape[2]
+def create_tfrecord(img, label_map, class_hist, depth_img,
+                    num_labels, img_name, save_dir):
+  height = img.shape[0]
+  width = img.shape[1]
+  channels = img.shape[2]
 
-  filename = os.path.join(save_dir + img_name + '.tfrecords')
+  filename = join(save_dir + img_name + '.tfrecords')
   writer = tf.python_io.TFRecordWriter(filename)
-  rgb_raw = rgb.tostring()
-  disp_raw = depth_img.tostring()
-  labels_raw = label_map.tostring()
-  weights_str = weight_map.tostring()
+  img_str = img.tostring()
+  labels_str = label_map.tostring()
+  class_hist_str = class_hist.tostring()
+  depth_raw = depth_img.tostring()
   example = tf.train.Example(features=tf.train.Features(feature={
-      'height': _int64_feature(rows),
-      'width': _int64_feature(cols),
-      'depth': _int64_feature(depth),
+      'height': _int64_feature(height),
+      'width': _int64_feature(width),
+      'channels': _int64_feature(channels),
       'num_labels': _int64_feature(int(num_labels)),
       'img_name': _bytes_feature(img_name.encode()),
-      'rgb': _bytes_feature(rgb_raw),
-      'label_weights': _bytes_feature(weights_str),
-      'labels': _bytes_feature(labels_raw),
-      'disparity': _bytes_feature(disp_raw)
+      'image': _bytes_feature(img_str),
+      'class_hist': _bytes_feature(class_hist_str),
+      'labels': _bytes_feature(labels_str),
+      'depth': _bytes_feature(depth_raw)
       }))
   writer.write(example.SerializeToString())
   writer.close()
@@ -145,10 +150,14 @@ def prepare_dataset(name):
       instance_gt_path = join(gt_dir, city, img_prefix + '_gtFine_instanceIds.png')
       instance_gt_img = ski.data.load(instance_gt_path)
       #instance_gt_img = np.ascontiguousarray(instance_gt_img[cy_start:cy_end,cx_start:cx_end])
-      gt_img = data_utils.convert_ids(orig_gt_img)
-
+      gt_img, car_mask = data_utils.convert_ids(orig_gt_img)
+      rgb[car_mask] = 0
+      #cv2.imwrite(join('/home/kivan/datasets/Cityscapes/tensorflow/tmp/',
+      #  img_prefix + '.png'), rgb)
       gt_img = gt_img.astype(np.int8)
-      weights, num_labels = data_utils.get_class_weights(gt_img)
+      gt_img[gt_img == -1] = FLAGS.num_classes
+
+      #weights, num_labels = data_utils.get_class_weights(gt_img)
 
 
       #orig_gt_crops = crop_data(orig_gt_img, left_x_end, right_x_start)
@@ -163,21 +172,23 @@ def prepare_dataset(name):
       rgb_crops = crop_data(rgb)
       depth_crops = crop_data(depth)
       gt_crops = crop_data(gt_img)
-      weights_crops = crop_data(weights)
+      #weights_crops = crop_data(weights)
 
       for i in range(len(rgb_crops)):
+        class_hist, num_labels = data_utils.get_class_hist(gt_crops[i], FLAGS.num_classes)
         img_name = img_prefix + '_' + str(i)
-        create_tfrecord(rgb_crops[i], gt_crops[i], weights_crops[i],
+        create_tfrecord(rgb_crops[i], gt_crops[i], class_hist,
                         depth_crops[i], num_labels, img_name, save_dir)
-        ski.io.imsave(join(gt_save_dir, 'label', img_name + '.png'),
-                      orig_gt_crops[i])
-        ski.io.imsave(join(gt_save_dir, 'instance', img_name + '.png'),
-                      instance_gt_crops[i])
+        if name == 'val':
+          ski.io.imsave(join(gt_save_dir, 'label', img_name + '.png'),
+                        orig_gt_crops[i])
+          ski.io.imsave(join(gt_save_dir, 'instance', img_name + '.png'),
+                        instance_gt_crops[i])
 
 
 def main(argv):
-  prepare_dataset('val')
   prepare_dataset('train')
+  prepare_dataset('val')
 
 
 if __name__ == '__main__':

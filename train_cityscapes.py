@@ -41,7 +41,8 @@ def train(model, train_dataset, valid_dataset):
     train_ops, init_op, init_feed = model.build(train_dataset, is_training=True)
     num_params = train_helper.get_num_params()
 
-    valid_ops = model.build(valid_dataset, is_training=False, reuse=True)
+    if valid_dataset != None:
+      valid_ops = model.build(valid_dataset, is_training=False, reuse=True)
     loss = train_ops[0]
 
     num_batches = model.num_batches(train_dataset)
@@ -125,8 +126,8 @@ def train(model, train_dataset, valid_dataset):
 
         assert not np.isnan(loss_val), 'Model diverged with loss = NaN'
         # estimate training accuracy on the last 40% of the epoch
-        if step > int(0.6 * num_batches):
-          model.update_stats(ret_val)
+        #if step > int(0.5 * num_batches):
+        model.update_stats(ret_val)
 
         #img_prefix = img_prefix[0].decode("utf-8")
 
@@ -134,8 +135,8 @@ def train(model, train_dataset, valid_dataset):
         #  model.draw_prediction('train', epoch_num, step, ret_val)
 
         #if step % 50 == 0:
-        if step % 30 == 0:
         #if step % 1 == 0:
+        if step % 30 == 0:
           examples_per_sec = FLAGS.batch_size / duration
           sec_per_batch = float(duration)
 
@@ -145,9 +146,10 @@ def train(model, train_dataset, valid_dataset):
           print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num,
                               step, model.num_batches(train_dataset), loss_val,
                               examples_per_sec, sec_per_batch))
-      model.end_epoch(train_data)
+      is_best = model.end_epoch(train_data)
       #train_helper.print_variable_diff(sess, init_vars)
-      is_best = model.evaluate('valid', sess, epoch_num, valid_ops, valid_dataset, valid_data)
+      if valid_dataset != None:
+        is_best = model.evaluate('valid', sess, epoch_num, valid_ops, valid_dataset, valid_data)
       model.print_results(train_data, valid_data)
 
       #valid_loss, valid_pixacc, valid_iou, valid_recall, valid_precision = evaluate(
@@ -189,9 +191,11 @@ def main(argv=None):  # pylint: disable=unused-argument
 
   print('Experiment dir: ' + FLAGS.train_dir)
   print('Dataset dir: ' + FLAGS.dataset_dir)
-  train_dataset = CityscapesDataset(FLAGS.dataset_dir, 'train')
-  valid_dataset = CityscapesDataset(FLAGS.dataset_dir, 'val')
-  train(model, train_dataset, valid_dataset)
+  #train_dataset = CityscapesDataset(FLAGS.dataset_dir, ['train'])
+  #valid_dataset = CityscapesDataset(FLAGS.dataset_dir, ['val'])
+  #train(model, train_dataset, valid_dataset)
+  train_dataset = CityscapesDataset(FLAGS.dataset_dir, ['train', 'val'])
+  train(model, train_dataset, None)
 
 
 if __name__ == '__main__':

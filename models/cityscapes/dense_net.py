@@ -120,10 +120,14 @@ def start_epoch(train_data):
 def end_epoch(train_data):
   pixacc, iou, _, _, _ = eval_helper.compute_errors(
       train_conf_mat, 'Train', CityscapesDataset.CLASS_INFO)
+  is_best = False
+  if len(train_data['iou']) and iou > max(train_data['iou']):
+    is_best = True
   train_data['iou'].append(iou)
   train_data['acc'].append(pixacc)
   train_loss_val = np.mean(train_loss_arr)
   train_data['loss'].append(train_loss_val)
+  return is_best
 
 
 def update_stats(ret_val):
@@ -266,7 +270,11 @@ def dense_block(net, size, growth, name, is_training=False, first=False, split=F
 def dense_block_multigpu(net, size, growth, name, is_training=False, first=False, split=False):
   with tf.variable_scope(name):
     for i in range(size):
-      if i < size//2:
+      #if i < size//2:
+      #if i < 6:
+      #if i < 3:
+
+      if i < 12:
         gpu = '/gpu:0'
       else:
         gpu = '/gpu:1'
@@ -291,11 +299,13 @@ def dense_block_multigpu(net, size, growth, name, is_training=False, first=False
 #up_sizes = [196,256,384,512]
 #up_sizes = [256,256,384,512]
 #up_sizes = [128,128,256,256]
+
+#up_sizes = [8,8,8,8] # 2gpus
 #up_sizes = [128,128,256,512] # 2gpus
-#up_sizes = [128,256,384,512] # 2gpus
 #up_sizes = [128,256,384,512] # 2gpus
 #up_sizes = [128,128,256,384,512] # 2gpus
 up_sizes = [256,256,512,512]
+#up_sizes = [128,256,512,512]
 def dense_block_upsample(net, skip_net, depth, size, growth, name):
   with tf.variable_scope(name):
     net = tf.concat([net, skip_net], maps_dim)
@@ -378,11 +388,10 @@ def _build(image, depth, is_training=False):
     net = dense_block(net, block_sizes[0], growth, 'block0', is_training, first=True)
     #net, skip = dense_block(net, block_sizes[0], growth, 'block0', is_training,
     #    first=True, split=True)
-    #skip_layers.append([skip, 64, growth_up, 'block0_mid_refine', depth])
+    #skip_layers.append([skip, 128, growth_up, 'block0_mid_refine', depth])
 
-    skip_layers.append([net, up_sizes[0], growth_up, 'block0_refine', depth])
+    #skip_layers.append([net, up_sizes[0], growth_up, 'block0_refine', depth])
     net, skip = transition(net, compression, 'block0/transition')
-    #skip_layers.append([skip, up_sizes[0], growth_up, 'block0_refine', depth])
 
     net = dense_block(net, block_sizes[1], growth, 'block1', is_training)
     skip_layers.append([net, up_sizes[1], growth_up, 'block1_refine', depth])
@@ -403,9 +412,9 @@ def _build(image, depth, is_training=False):
     #skip_layers.append([skip, km, 'block3', depth])
 
     with tf.variable_scope('head'):
-      net = dense_block_context(net)
-      #print('5x5')
-      #net = BNReluConv(net, context_size, 'context_conv', k=5)
+      #net = dense_block_context(net)
+      print('5x5')
+      net = BNReluConv(net, context_size, 'context_conv', k=5)
       #print('7x7')
       #net = BNReluConv(net, context_size, 'context_conv', k=7)
       #print('3 x 3x3')
@@ -443,7 +452,7 @@ def _build(image, depth, is_training=False):
     return logits, mid_logits
 
 
-def _build_2gpu_new(image, depth, is_training=False):
+def _build_2gpus(image, depth, is_training=False):
   #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
   bn_params['is_training'] = is_training
   with arg_scope([layers.conv2d],
@@ -481,15 +490,15 @@ def _build_2gpu_new(image, depth, is_training=False):
       net, skip = transition(net, compression, 'block0/transition')
       #skip_layers.append([skip, up_sizes[0], growth_up, 'block0_refine', depth])
 
-      #net = dense_block(net, block_sizes[1], growth, 'block1', is_training)
-      net = dense_block_multigpu(net, block_sizes[1], growth, 'block1', is_training)
+      net = dense_block(net, block_sizes[1], growth, 'block1', is_training)
+      #net = dense_block_multigpu(net, block_sizes[1], growth, 'block1', is_training)
       skip_layers.append([net, up_sizes[1], growth_up, 'block1_refine', depth])
 
-    with tf.device(gpu2):
       #net, skip = dense_block(net, block_sizes[1], k, 'block1', is_training, split=True)
       net, skip = transition(net, compression, 'block1/transition')
       #skip_layers.append([skip, up_sizes[1], growth_up, 'block1_refine', depth])
 
+    with tf.device(gpu2):
       # works the same with split, not 100%
       net, skip = dense_block(net, block_sizes[2], growth, 'block2', is_training, split=True)
       skip_layers.append([skip, up_sizes[2], growth_up, 'block2_mid_refine', depth])
@@ -503,11 +512,15 @@ def _build_2gpu_new(image, depth, is_training=False):
       #skip_layers.append([skip, up_sizes[3], growth_up, 'block3_refine', depth])
 
       with tf.variable_scope('head'):
-        net = dense_block_context(net)
+        #net = dense_block_context(net)
         #print('5x5')
         #net = BNReluConv(net, context_size, 'context_conv', k=5)
-        #print('7x7')
+        print('7x7 dilated')
         #net = BNReluConv(net, context_size, 'context_conv', k=7)
+        net1 = BNReluConv(net, context_size//2, 'context_conv1', k=7)
+        net2 = BNReluConv(net, context_size//2, 'context_conv2', k=7, rate=2)
+        net = tf.concat([net1, net2], maps_dim)
+        #net = BNReluConv(net, 32, 'context_conv', k=1)
         #print('3 x 3x3')
         #net = BNReluConv(net, context_size, 'context_conv1', k=3)
         #net = BNReluConv(net, context_size, 'context_conv2', k=3)
@@ -672,30 +685,38 @@ def build(dataset, is_training, reuse=False):
       return run_ops
 
 
+def inference(image, constant_shape=True):
+  x = normalize_input(image)
+  logits, mid_logits = _build(x, is_training=False)
+  return logits, mid_logits
+
+
 #def _multiloss(logits, mid_logits, labels, weights, is_training=True):
 def _multiloss(logits, mid_logits, labels, num_labels, class_hist, is_training):
-  max_weight = 1
-  #max_weight = 10
-  #max_weight = 50
-  loss1 = losses.weighted_cross_entropy_loss(
-      logits, labels, num_labels, class_hist, max_weight=max_weight)
-  loss2 = losses.weighted_cross_entropy_loss(
-      mid_logits, labels, num_labels, class_hist, max_weight=max_weight)
-  #loss1 = losses.weighted_cross_entropy_loss(logits, labels, weights,
-  #    max_weight=max_weight)
-  #loss2 = losses.weighted_cross_entropy_loss(mid_logits, labels, weights,
-  #    max_weight=max_weight)
-  #wgt = 0.4
-  #xent_loss = loss1 + wgt * loss2
-  wgt = 0.3 # best
-  #wgt = 0.2
-  #wgt = 0.4
-  xent_loss = (1-wgt)*loss1 + wgt*loss2
-  all_losses = [xent_loss]
+  #gpu = '/gpu:1'
+  gpu = '/gpu:0'
+  with tf.device(gpu):
+    max_weight = FLAGS.max_weight
+    #max_weight = 10
+    #max_weight = 50
+    loss1 = losses.weighted_cross_entropy_loss(
+        logits, labels, num_labels, class_hist, max_weight=max_weight)
+    loss2 = losses.weighted_cross_entropy_loss(
+        mid_logits, labels, num_labels, class_hist, max_weight=max_weight)
+    #loss1 = losses.weighted_cross_entropy_loss(logits, labels, weights,
+    #    max_weight=max_weight)
+    #loss2 = losses.weighted_cross_entropy_loss(mid_logits, labels, weights,
+    #    max_weight=max_weight)
+    #wgt = 0.4
+    #xent_loss = loss1 + wgt * loss2
+    wgt = 0.3 # best
+    #wgt = 0.2
+    #wgt = 0.4
+    xent_loss = (1-wgt)*loss1 + wgt*loss2
 
+  all_losses = [xent_loss]
   # get losses + regularization
   total_loss = losses.total_loss_sum(all_losses)
-
   if is_training:
     loss_averages_op = losses.add_loss_summaries(total_loss)
     with tf.control_dependencies([loss_averages_op]):
@@ -713,8 +734,9 @@ def minimize(loss, global_step, num_batches):
   #base_lr = 1e-2 # for sgd
   base_lr = FLAGS.initial_learning_rate
   #stairs = True
-  stairs = False
-  fine_lr_div = 5
+  stairs = FLAGS.staircase
+  fine_lr_div = FLAGS.fine_lr_div
+  #fine_lr_div = 10
   print('fine_lr = base_lr / ', fine_lr_div)
   #lr_fine = tf.train.exponential_decay(base_lr / 10, global_step, decay_steps,
   #lr_fine = tf.train.exponential_decay(base_lr / 20, global_step, decay_steps,

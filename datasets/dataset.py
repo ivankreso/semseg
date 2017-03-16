@@ -1,12 +1,13 @@
 import os
 
 class Dataset(object):
-  def __init__(self, data_dir, subset):
-    self.subset = subset
-    self.data_dir = os.path.join(data_dir, subset)
-    files = next(os.walk(self.data_dir))[2]
-    self.filenames = [os.path.join(self.data_dir, f) for f in files]
-    #self.filenames = [self.filenames[i] for i in range(30)]
+  def __init__(self, data_dir, subsets):
+    self.subsets = subsets
+    self.filenames = []
+    for subset in subsets:
+      subset_dir = os.path.join(data_dir, subset)
+      files = next(os.walk(subset_dir))[2]
+      self.filenames.extend([os.path.join(subset_dir, f) for f in files])
 
 
   def num_classes(self):

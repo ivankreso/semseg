@@ -37,12 +37,14 @@ tf.app.flags.DEFINE_integer('cy_start', 30, '')
 tf.app.flags.DEFINE_integer('cy_end', 900, '')
 tf.app.flags.DEFINE_integer('img_width', 768, '')
 tf.app.flags.DEFINE_integer('img_height', 320, '')
+
+#tf.app.flags.DEFINE_integer('img_width', 1024, '')
+#tf.app.flags.DEFINE_integer('img_height', 448, '')
+
 #tf.app.flags.DEFINE_integer('img_width', 640, '')
 #tf.app.flags.DEFINE_integer('img_height', 272, '')
 #tf.app.flags.DEFINE_integer('img_width', 384, '')
 #tf.app.flags.DEFINE_integer('img_height', 164, '')
-#tf.app.flags.DEFINE_integer('img_width', 1024, '')
-#tf.app.flags.DEFINE_integer('img_height', 448, '')
 tf.app.flags.DEFINE_boolean('downsample', True, '')
 #tf.app.flags.DEFINE_integer('img_width', 1600, '')
 #tf.app.flags.DEFINE_integer('img_height', 680, '')
@@ -57,7 +59,7 @@ tf.app.flags.DEFINE_boolean('downsample', True, '')
 
 tf.app.flags.DEFINE_string('save_dir',
     '/home/kivan/datasets/Cityscapes/tensorflow/' +
-    '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '_new/', '')
+    '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '/', '')
     #'{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '_rgbd/', '')
 
 def _int64_feature(value):
@@ -105,7 +107,6 @@ def prepare_dataset(name):
   width = FLAGS.img_width
   root_dir = FLAGS.data_dir + '/rgb/' + name + '/'
   depth_dir = join(FLAGS.data_dir, 'depth', name)
-  print(depth_dir)
   gt_dir = join(FLAGS.gt_dir, name)
   cities = next(os.walk(root_dir))[1]
   save_dir = FLAGS.save_dir + name + '/'
@@ -156,7 +157,8 @@ def prepare_dataset(name):
       if FLAGS.downsample:
         full_gt_img = ski.transform.resize(full_gt_img, (FLAGS.img_height, FLAGS.img_width),
                                            order=0, preserve_range=True).astype(np.uint8)
-      gt_img = data_utils.convert_ids(full_gt_img)
+      gt_img, car_mask = data_utils.convert_ids(full_gt_img)
+      rgb[car_mask] = 0
       #print(gt_img[40:60,100:110])
       #gt_weights = gt_data[1]
       gt_img = gt_img.astype(np.int8)

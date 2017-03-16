@@ -60,7 +60,8 @@ def weighted_cross_entropy_loss(logits, labels, num_labels, class_hist, max_weig
     logits = tf.reshape(logits, [num_pixels, FLAGS.num_classes])
     xent = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=onehot_labels)
 
-    num_labels = tf.to_float(tf.reduce_sum(num_labels))
+    #num_labels = tf.to_float(tf.reduce_sum(num_labels))
+    num_labels = tf.reduce_sum(tf.to_float(num_labels))
     class_hist = tf.to_float(tf.reduce_sum(class_hist, axis=0))
 
     #class_hist = tf.Print(class_hist, [class_hist], 'hist = ', summarize=30)
