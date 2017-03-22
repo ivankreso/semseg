@@ -8,12 +8,12 @@ import tensorflow as tf
 import skimage as ski
 import skimage.data
 from tqdm import trange
-import cv2
+#import cv2
 
 import data_utils
 
 FLAGS = tf.app.flags.FLAGS
-
+IMG_MEAN = [75, 85, 75]
 
 # Basic model parameters.
 flags = tf.app.flags
@@ -28,7 +28,7 @@ flags.DEFINE_integer('img_height', 1024, '')
 flags.DEFINE_integer('rf_half_size', 128, '')
 flags.DEFINE_string('save_dir',
     '/home/kivan/datasets/Cityscapes/tensorflow/' + str(FLAGS.img_width) +
-    'x' + str(FLAGS.img_height) + '/', '')
+    'x' + str(FLAGS.img_height) + '_2mp/', '')
 tf.app.flags.DEFINE_integer('num_classes', 19, '')
 
 #flags.DEFINE_integer('cx_start', 0, '')
@@ -49,12 +49,12 @@ def crop_data_split(img, left_end, right_start, clear_overlap=False, fill_val=No
   return [img_left, img_right]
 
 
-def crop_data(img):
-  img = np.ascontiguousarray(img[FLAGS.cy_start:FLAGS.cy_end,...])
-  return [img]
-
 #def crop_data(img):
+#  img = np.ascontiguousarray(img[FLAGS.cy_start:FLAGS.cy_end,...])
 #  return [img]
+
+def crop_data(img):
+  return [img]
 
 
 def _int64_feature(value):
@@ -97,7 +97,6 @@ def create_tfrecord(img, label_map, class_hist, depth_img,
 
 
 def prepare_dataset(name):
-  #rgb_means = [123.68, 116.779, 103.939]
   print('Preparing ' + name)
   root_dir = join(FLAGS.data_dir, 'rgb', name)
   depth_dir = join(FLAGS.data_dir, 'depth', name)
@@ -127,9 +126,9 @@ def prepare_dataset(name):
       img_cnt += 1
       img_name = img_list[i]
       img_prefix = img_name[:-4]
-      rgb_path = join(root_dir, city, img_name)
-      #rgb = ski.data.load(rgb_path)
-      rgb = cv2.imread(rgb_path, cv2.IMREAD_COLOR)
+      img_path = join(root_dir, city, img_name)
+      img = ski.data.load(img_path)
+      #img = cv2.imread(img_path, cv2.IMREAD_COLOR)
       depth_path = join(depth_dir, city, img_prefix + '_leftImg8bit.png')
       depth = ski.data.load(depth_path)
       depth = np.round(depth / 256.0).astype(np.uint8)
@@ -151,9 +150,10 @@ def prepare_dataset(name):
       instance_gt_img = ski.data.load(instance_gt_path)
       #instance_gt_img = np.ascontiguousarray(instance_gt_img[cy_start:cy_end,cx_start:cx_end])
       gt_img, car_mask = data_utils.convert_ids(orig_gt_img)
-      rgb[car_mask] = 0
-      #cv2.imwrite(join('/home/kivan/datasets/Cityscapes/tensorflow/tmp/',
-      #  img_prefix + '.png'), rgb)
+      #img[car_mask] = 0
+      img[car_mask] = IMG_MEAN
+      #ski.io.imsave(join('/home/kivan/datasets/Cityscapes/tensorflow/tmp/',
+      #              img_prefix + '.png'), img)
       gt_img = gt_img.astype(np.int8)
       gt_img[gt_img == -1] = FLAGS.num_classes
 
@@ -169,15 +169,15 @@ def prepare_dataset(name):
       #                          clear_overlap=True, fill_val=0)
       orig_gt_crops = crop_data(orig_gt_img)
       instance_gt_crops = crop_data(instance_gt_img)
-      rgb_crops = crop_data(rgb)
+      img_crops = crop_data(img)
       depth_crops = crop_data(depth)
       gt_crops = crop_data(gt_img)
       #weights_crops = crop_data(weights)
 
-      for i in range(len(rgb_crops)):
+      for i in range(len(img_crops)):
         class_hist, num_labels = data_utils.get_class_hist(gt_crops[i], FLAGS.num_classes)
         img_name = img_prefix + '_' + str(i)
-        create_tfrecord(rgb_crops[i], gt_crops[i], class_hist,
+        create_tfrecord(img_crops[i], gt_crops[i], class_hist,
                         depth_crops[i], num_labels, img_name, save_dir)
         if name == 'val':
           ski.io.imsave(join(gt_save_dir, 'label', img_name + '.png'),

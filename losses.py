@@ -85,7 +85,7 @@ def weighted_cross_entropy_loss(logits, labels, num_labels, class_hist, max_weig
     return xent
 
 
-def weighted_cross_entropy_loss_baad(logits, labels, weights=None,
+def weighted_cross_entropy_loss_old(logits, labels, weights=None,
                                 num_labels=None, max_weight=100):
   print('loss: cross-entropy')
   num_pixels = -1

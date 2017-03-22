@@ -3,6 +3,7 @@ import pickle
 import tensorflow as tf
 import numpy as np
 import cv2
+from os.path import join
 
 import tensorflow.contrib.layers as layers
 from tensorflow.contrib.framework import arg_scope
@@ -21,11 +22,13 @@ FLAGS = tf.app.flags.FLAGS
 data_mean = [116.49585869, 112.43425923, 103.19996733]
 data_std = [60.37073962, 59.39268441, 60.74823033]
 
+root_dir = '/home/kivan/datasets/voc2012_aug'
 if FLAGS.no_valid:
+  raise 1
   train_dataset = Dataset(FLAGS.dataset_dir, 'trainval')
 else:
-  train_dataset = Dataset(FLAGS.dataset_dir, 'train')
-  valid_dataset = Dataset(FLAGS.dataset_dir, 'val')
+  train_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, 'train.txt'), 'train')
+  valid_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, 'val.txt'), 'val')
 
 model_depth = 121
 imagenet_init = True
@@ -52,7 +55,7 @@ context_size = 512
 #context_size = 256
 growth = 32
 compression = 0.5
-#growth_up = 32
+growth_up = 32
 #up_sizes = [4,4,8,8]
 #up_sizes = [2,2,4,4]
 #up_sizes = [3,3,4,4]
@@ -344,7 +347,8 @@ def dense_block_upsample_notbest(net, skip_net, size, growth, name):
 #up_sizes = [128,196,256,384]
 #up_sizes = [256,256,256,384]
 
-up_sizes = [64,128,256,512] # good
+#up_sizes = [64,128,256,512] # good
+up_sizes = [128,256,256,512] # good
 #up_sizes = [128,256,384,512] # 0.5% worse then up
 #up_sizes = [32,64,128,256]
 def dense_block_upsample(net, skip_net, size, growth, name):
@@ -359,7 +363,7 @@ def dense_block_upsample(net, skip_net, size, growth, name):
   return net
 
 # tiramisu
-growth_up = 64
+#growth_up = 64
 #up_sizes = [2,3,4,5]
 #def dense_block_upsample(net, skip_net, size, growth, name):
 #  with tf.variable_scope(name):
@@ -415,24 +419,24 @@ def _build(image, is_training=False):
     #    first=True, split=True)
     #skip_layers.append([skip, 256, growth_up, 'block0_mid_refine', depth])
     #skip_layers.append([skip, up_sizes[0], growth_up, 'block0_mid_refine'])
-    #skip_layers.append([net, up_sizes[0], growth_up, 'block0_refine'])
-    net, skip = transition(net, compression, 'block0/transition')
-    skip_layers.append([skip, up_sizes[0], growth_up, 'block0_refine'])
+    skip_layers.append([net, up_sizes[0], growth_up, 'block0_refine'])
+    net, _ = transition(net, compression, 'block0/transition')
+    #skip_layers.append([skip, up_sizes[0], growth_up, 'block0_refine'])
 
     #net, skip = dense_block(net, block_sizes[1], growth, 'block1', is_training, split=True)
     #skip_layers.append([skip, up_sizes[1], growth_up, 'block1_mid_refine'])
     net = dense_block(net, block_sizes[1], growth, 'block1', is_training)
-    #skip_layers.append([net, up_sizes[1], growth_up, 'block1_refine'])
-    net, skip = transition(net, compression, 'block1/transition')
-    skip_layers.append([skip, up_sizes[1], growth_up, 'block1_refine'])
+    skip_layers.append([net, up_sizes[1], growth_up, 'block1_refine'])
+    net, _ = transition(net, compression, 'block1/transition')
+    #skip_layers.append([skip, up_sizes[1], growth_up, 'block1_refine'])
 
     # works the same with split, not 100%
     net, skip = dense_block(net, block_sizes[2], growth, 'block2', is_training, split=True)
     skip_layers.append([skip, up_sizes[2], growth_up, 'block2_mid_refine'])
     #net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
-    #skip_layers.append([net, up_sizes[3], growth_up, 'block2_refine'])
-    net, skip = transition(net, compression, 'block2/transition')
-    skip_layers.append([skip, up_sizes[3], growth_up, 'block2_refine'])
+    skip_layers.append([net, up_sizes[3], growth_up, 'block2_refine'])
+    net, _ = transition(net, compression, 'block2/transition')
+    #skip_layers.append([skip, up_sizes[3], growth_up, 'block2_refine'])
 
     #skip_layers.append([skip, 4, k_up, 'block2_refine', depth])
     net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
@@ -606,9 +610,9 @@ def _multiloss(logits, mid_logits, labels, weights, num_labels, is_training=True
   #loss1 = losses.cross_entropy_loss(logits, labels, weights, num_labels)
   #loss2 = losses.cross_entropy_loss(mid_logits, labels, weights, num_labels)
   max_weight = 10
-  loss1 = losses.weighted_cross_entropy_loss(logits, labels, weights, num_labels,
+  loss1 = losses.weighted_cross_entropy_loss_old(logits, labels, weights, num_labels,
       max_weight=max_weight)
-  loss2 = losses.weighted_cross_entropy_loss(mid_logits, labels, weights, num_labels,
+  loss2 = losses.weighted_cross_entropy_loss_old(mid_logits, labels, weights, num_labels,
       max_weight=max_weight)
   #wgt = 0.4
   #xent_loss = loss1 + wgt * loss2

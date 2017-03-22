@@ -61,10 +61,12 @@ def evaluate(model, dataset, save_dir):
   loss_vals = []
   img_names = []
   for i in trange(dataset.num_examples()):
-    loss_val, out_logits, gt_labels, img_prefix, mid_logits = sess.run(run_ops)
+    #loss_val, out_logits, gt_labels, img_prefix, mid_logits = sess.run(run_ops)
+    out_logits, mid_logits, gt_labels, img_prefix = sess.run(run_ops)
     img_prefix = img_prefix[0].decode("utf-8")
-    loss_avg += loss_val
-    loss_vals += [loss_val]
+    #loss_avg += loss_val
+    #loss_vals += [loss_val]
+
     img_names += [img_prefix]
     #net_labels = out_logits[0].argmax(2).astype(np.int32, copy=False)
     net_labels = out_logits[0].argmax(2).astype(np.int32)
@@ -82,7 +84,8 @@ def evaluate(model, dataset, save_dir):
     pred_save_path = os.path.join(save_dir, img_prefix + '_middle.png')
     eval_helper.draw_output(mid_labels, CityscapesDataset.CLASS_INFO, pred_save_path)
     #error_save_path = os.path.join(save_dir, str(loss_val) + img_prefix + '_errors.png')
-    filename =  img_prefix + '_' + str(loss_val) + '_error.png'
+    #filename =  img_prefix + '_' + str(loss_val) + '_error.png'
+    filename =  img_prefix + '_error.png'
     error_save_path = os.path.join(save_dir, filename)
     eval_helper.draw_output(net_labels, CityscapesDataset.CLASS_INFO, error_save_path)
     #print(q_size)
@@ -95,9 +98,9 @@ def evaluate(model, dataset, save_dir):
   #  ski.io.imshow(os.path.join(save_dir, elem[1] + '_errors.png'))
   #  ski.io.show()
 
-  print('')
-  pixel_acc, iou_acc, recall, precision, _ = eval_helper.compute_errors(
-      conf_mat, 'Validation', CityscapesDataset.CLASS_INFO, verbose=True)
+  #print('')
+  #pixel_acc, iou_acc, recall, precision, _ = eval_helper.compute_errors(
+  #    conf_mat, 'Validation', CityscapesDataset.CLASS_INFO, verbose=True)
 
   coord.request_stop()
   coord.join(threads)
@@ -114,8 +117,8 @@ def main(argv=None):  # pylint: disable=unused-argument
   save_dir = os.path.join(FLAGS.model_dir, 'evaluation')
   tf.gfile.MakeDirs(save_dir)
 
-  train_dataset = CityscapesDataset(FLAGS.dataset_dir, 'train')
-  valid_dataset = CityscapesDataset(FLAGS.dataset_dir, 'val')
+  #train_dataset = CityscapesDataset(FLAGS.dataset_dir, 'train')
+  valid_dataset = CityscapesDataset(FLAGS.dataset_dir, ['val'])
   #train(model, train_dataset, valid_dataset)
   evaluate(model, valid_dataset, os.path.join(save_dir, 'validation'))
   #evaluate(model, train_dataset, os.path.join(save_dir, 'train'))

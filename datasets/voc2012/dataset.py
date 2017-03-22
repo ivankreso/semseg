@@ -24,10 +24,9 @@ class Dataset(object):
                 [0,0,230,      'train'],
                 [119,11,32,    'monitor']]
 
-  def __init__(self, data_dir, subset):
+  def __init__(self, data_dir, subset_path, subset):
     self.subset = subset
-    filepath = join('/home/kivan/datasets/VOC2012/ImageSets/Segmentation', subset + '.txt')
-    fp = open(filepath)
+    fp = open(subset_path)
     filenames = [line.strip() + '.tfrecords' for line in fp.readlines()]
     self.data_dir = data_dir
     self.filenames = [os.path.join(self.data_dir, f) for f in filenames]

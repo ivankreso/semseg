@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 import train_helper
 
-MODEL_PATH = './models/cityscapes/dense_net.py'
+MODEL_PATH = './models/cityscapes/resnet.py'
 #MODEL_PATH = './models/cityscapes/dense_net_dilated.py'
 SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/cityscapes',
                         train_helper.get_time_string())
@@ -10,14 +10,14 @@ SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/cityscapes',
 #IMG_WIDTH, IMG_HEIGHT = 1152, 1024
 #DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
+#IMG_WIDTH, IMG_HEIGHT = 2048, 1024
 #IMG_WIDTH, IMG_HEIGHT = 2048, 896
 #DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
 #IMG_WIDTH, IMG_HEIGHT = 640, 272
 
-IMG_WIDTH, IMG_HEIGHT = 2048, 1024
 #IMG_WIDTH, IMG_HEIGHT = 1024, 448
-#IMG_WIDTH, IMG_HEIGHT = 768, 320
+IMG_WIDTH, IMG_HEIGHT = 768, 320
 DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
                            '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 ##                           '{}x{}_jitter'.format(IMG_WIDTH, IMG_HEIGHT))
@@ -32,12 +32,10 @@ tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
 tf.app.flags.DEFINE_float('fine_lr_div', 5, '')
 tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
-#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 8, '')
 tf.app.flags.DEFINE_boolean('staircase', True, '.')
 #tf.app.flags.DEFINE_integer('max_weight', 1, '')
 tf.app.flags.DEFINE_integer('max_weight', 10, '')
-#tf.app.flags.DEFINE_integer('max_weight', 50, '')
 
 #tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
 #tf.app.flags.DEFINE_float('fine_lr_div', 10, '') bad
@@ -61,7 +59,7 @@ tf.app.flags.DEFINE_integer('max_weight', 10, '')
 tf.app.flags.DEFINE_integer('batch_size', 3, '')
 tf.app.flags.DEFINE_integer('batch_size_valid', 2, '')
 tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
-tf.app.flags.DEFINE_integer('max_epochs', 50, 'Number of epochs to run.')
+tf.app.flags.DEFINE_integer('max_epochs', 40, 'Number of epochs to run.')
 
 #tf.app.flags.DEFINE_string('optimizer', 'Momentum', '')
 ##tf.app.flags.DEFINE_float('initial_learning_rate', 2e-4,

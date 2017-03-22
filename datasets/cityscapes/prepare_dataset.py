@@ -7,11 +7,12 @@ import tensorflow as tf
 import skimage as ski
 import skimage.data
 import skimage.transform
-import cv2
+#import cv2
 from tqdm import trange
 
 import data_utils
 
+IMG_MEAN = [75, 85, 75]
 np.set_printoptions(linewidth=250)
 
 FLAGS = tf.app.flags.FLAGS
@@ -131,12 +132,11 @@ def prepare_dataset(name):
       img_name = img_list[i]
       img_prefix = img_name[:-4]
       rgb_path = root_dir + city + '/' + img_name
-      #rgb = ski.data.load(rgb_path)
-      rgb = cv2.imread(rgb_path, cv2.IMREAD_COLOR)
+      rgb = ski.data.load(rgb_path)
+      #rgb = cv2.imread(rgb_path, cv2.IMREAD_COLOR)
       rgb = np.ascontiguousarray(rgb[cy_start:cy_end,cx_start:cx_end,:])
-      rgb = cv2.resize(rgb, (width, height), interpolation=cv2.INTER_CUBIC)
-      #rgb = ski.transform.resize(
-      #    rgb, (FLAGS.img_height, FLAGS.img_width), preserve_range=True, order=3)
+      #rgb = cv2.resize(rgb, (width, height), interpolation=cv2.INTER_CUBIC)
+      rgb = ski.transform.resize(rgb, (height, width), preserve_range=True, order=3)
       rgb = rgb.astype(np.uint8)
       #depth_img = None
       depth_path = join(depth_dir, city, img_name[:-4] + '_leftImg8bit.png')
@@ -158,7 +158,8 @@ def prepare_dataset(name):
         full_gt_img = ski.transform.resize(full_gt_img, (FLAGS.img_height, FLAGS.img_width),
                                            order=0, preserve_range=True).astype(np.uint8)
       gt_img, car_mask = data_utils.convert_ids(full_gt_img)
-      rgb[car_mask] = 0
+      #rgb[car_mask] = 0
+      rgb[car_mask] = IMG_MEAN
       #print(gt_img[40:60,100:110])
       #gt_weights = gt_data[1]
       gt_img = gt_img.astype(np.int8)

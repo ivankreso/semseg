@@ -23,12 +23,23 @@ import datasets.reader as reader
 
 tf.app.flags.DEFINE_integer('img_width', 2048, '')
 tf.app.flags.DEFINE_integer('img_height', 1024, '')
+#tf.app.flags.DEFINE_integer('img_height', 896, '')
 
-DATA_DIR = '/home/kivan/datasets/Cityscapes/orig/test'
-#SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes'
-DATA_DIR = '/home/kivan/datasets/Cityscapes/orig/test_masked'
-SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes_masked'
-NET_DIR = '/home/kivan/datasets/results/iccv/03_7_3_17-57-58/'
+#DATA_DIR = '/home/kivan/datasets/Cityscapes/orig/test'
+#DATA_DIR = '/home/kivan/datasets/Cityscapes/orig/test_masked'
+#DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/test'
+#DATA_DIR = '/home/kivan/datasets/Cityscapes/masked_1/test'
+
+#DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/black/full/test'
+#SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/hood/'
+DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/test'
+SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/hood2/'
+
+#DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/black/croped/test'
+#SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/main/'
+
+#NET_DIR = '/home/kivan/datasets/results/iccv/03_7_3_17-57-58/'
+NET_DIR = '/home/kivan/datasets/results/iccv/cityscapes/full_best_16_3_16-25-14/'
 MODEL_PATH = NET_DIR + 'model.py'
 
 #tf.app.flags.DEFINE_integer('img_width', 2048, '')
@@ -58,12 +69,21 @@ FLAGS = tf.app.flags.FLAGS
 #NET_DIR = '/home/kivan/source/results/semseg/tf/nets/7_6_15-08-57/'
 #NET_DIR = '/home/kivan/source/results/semseg/tf/saved/61.5_640_3_6_10-09-12/'
 
+def map_to_submit_ids(img):
+  img_ids = np.zeros_like(img, dtype=np.uint8)
+  for i, cid in enumerate(Dataset.train_ids):
+    img_ids[img==i] = cid
+  return img_ids
+
+
 def save_predictions(sess, image, logits, softmax):
   width = FLAGS.img_width
   height = FLAGS.img_height
   img_dir = FLAGS.dataset_dir
   cities = next(os.walk(img_dir))[1]
   for city in cities:
+    #if city != 'berlin':
+    #  continue
     city_dir = join(img_dir, city)
     image_list = next(os.walk(city_dir))[2]
     print(city)
@@ -78,16 +98,21 @@ def save_predictions(sess, image, logits, softmax):
       img_data = img.reshape(1, height, width, 3)
       out_logits, out_softmax = sess.run([logits, softmax], feed_dict={image : img_data})
       y = out_logits[0].argmax(2).astype(np.int32)
-      p = np.amax(out_softmax, axis=2)
+      #p = np.amax(out_softmax, axis=2)
       #print('Over 90% = ', (p > 0.9).sum() / p.size)
       #print(p)
-      eval_helper.draw_output(y, Dataset.CLASS_INFO, os.path.join(FLAGS.save_dir, image_list[i]))
-      save_path = os.path.join(FLAGS.save_dir, 'softmax_' + image_list[i])
-      ski.io.imsave(save_path, p)
+      eval_helper.draw_output(y, Dataset.CLASS_INFO, os.path.join(FLAGS.save_dir, 'color', image_list[i]))
+      y_submit = map_to_submit_ids(y)
+      save_path = join(FLAGS.save_dir, 'labels', image_list[i])
+      ski.io.imsave(save_path, y_submit)
+      #save_path = os.path.join(FLAGS.save_dir, 'softmax_' + image_list[i])
+      #ski.io.imsave(save_path, p)
 
 
 def main(argv=None):
   os.makedirs(FLAGS.save_dir, exist_ok=True)
+  os.makedirs(join(FLAGS.save_dir, 'color'), exist_ok=True)
+  os.makedirs(join(FLAGS.save_dir, 'labels'), exist_ok=True)
   print(MODEL_PATH)
   spec = importlib.util.spec_from_file_location("model", MODEL_PATH)
   model = importlib.util.module_from_spec(spec)

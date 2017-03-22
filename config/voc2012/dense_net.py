@@ -7,7 +7,7 @@ SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/voc2012/',
                         train_helper.get_time_string())
 
 #DATASET_DIR = '/home/kivan/datasets/VOC2012/tensorflow/'
-DATASET_DIR = '/home/kivan/datasets/VOC2012/tensorflow_weights/'
+DATASET_DIR = '/home/kivan/datasets/voc2012_aug/tensorflow'
 IMG_HEIGHT, IMG_WIDTH = 500, 500
 
 # 1e-3 best, 1e-2 is too big

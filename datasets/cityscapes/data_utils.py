@@ -6,6 +6,8 @@ def convert_ids(img):
   img_train = np.zeros_like(img)
   img_train.fill(255)
   car_mask = img == 1
+  height = car_mask.shape[0]
+  car_mask[height-5:,...] = True
   for i, cid in enumerate(CityscapesDataset.train_ids):
     img_train[img==cid] = i
   return img_train, car_mask

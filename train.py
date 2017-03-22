@@ -83,7 +83,7 @@ def train(model):
       print('tensorboard --logdir=' + FLAGS.train_dir + '\n')
       num_batches = model.num_batches() // FLAGS.num_validations_per_epoch
       model.start_epoch(train_data)
-      #for step in range(40):
+      #for step in range(30):
       for step in range(num_batches):
         start_time = time.time()
         run_ops = train_ops + [train_op, global_step]

@@ -2,7 +2,6 @@ import os, re
 import pickle
 import tensorflow as tf
 import numpy as np
-import cv2
 
 import tensorflow.contrib.layers as layers
 from tensorflow.contrib.framework import arg_scope
@@ -32,6 +31,7 @@ DEPTH_STD = 29.21617326
 model_depth = 121
 imagenet_init = True
 #imagenet_init = False
+#FIX
 init_dir = '/home/kivan/datasets/pretrained/dense_net/'
 apply_jitter = True
 #apply_jitter = False
@@ -165,15 +165,16 @@ def init_eval_data():
   return train_data, valid_data
 
 
-def normalize_input(bgr, depth):
+def normalize_input(rgb, depth=None):
   with tf.name_scope('input'), tf.device('/cpu:0'):
     if data_format == 'NCHW':
-      bgr = tf.transpose(bgr, perm=[0,3,1,2])
-      depth = tf.transpose(depth, perm=[0,3,1,2])
-    blue, green, red = tf.split(bgr, 3, axis=maps_dim)
-    #print(blue, green)
-    #img = tf.concat([red, green, blue], 3)
-    img = tf.concat([red, green, blue], maps_dim)
+      rgb = tf.transpose(rgb, perm=[0,3,1,2])
+      if depth != None:
+        depth = tf.transpose(depth, perm=[0,3,1,2])
+    #blue, green, red = tf.split(bgr, 3, axis=maps_dim)
+    ##print(blue, green)
+    ##img = tf.concat([red, green, blue], 3)
+    #img = tf.concat([red, green, blue], maps_dim)
     if data_format == 'NCHW':
       mean = tf.constant(DATA_MEAN, dtype=tf.float32, shape=[1,3,1,1])
       std = tf.constant(DATA_STD, dtype=tf.float32, shape=[1,3,1,1])
@@ -181,9 +182,11 @@ def normalize_input(bgr, depth):
       mean = DATA_MEAN
       std = DATA_STD
     #return (img - DATA_MEAN) / DATA_STD, depth - 33
-    img = (img - mean) / std
-    depth = (depth - DEPTH_MEAN) / DEPTH_STD
-    return img, depth
+    rgb = (rgb - mean) / std
+    if depth != None:
+      depth = (depth - DEPTH_MEAN) / DEPTH_STD
+      return rgb, depth
+    return rgb
 
 
 def resize_tensor(net, shape, name):
@@ -271,10 +274,7 @@ def dense_block_multigpu(net, size, growth, name, is_training=False, first=False
   with tf.variable_scope(name):
     for i in range(size):
       #if i < size//2:
-      #if i < 6:
-      #if i < 3:
-
-      if i < 12:
+      if i < 4:
         gpu = '/gpu:0'
       else:
         gpu = '/gpu:1'
@@ -303,9 +303,15 @@ def dense_block_multigpu(net, size, growth, name, is_training=False, first=False
 #up_sizes = [8,8,8,8] # 2gpus
 #up_sizes = [128,128,256,512] # 2gpus
 #up_sizes = [128,256,384,512] # 2gpus
+#up_sizes = [128,128,128,256] # 2gpus
+#up_sizes = [64,128,128,256] # 2gpus
 #up_sizes = [128,128,256,384,512] # 2gpus
-up_sizes = [256,256,512,512]
-#up_sizes = [128,256,512,512]
+#up_sizes = [256,256,512,512]
+#up_sizes = [10,10,10,10]
+#up_sizes = [64,128,256,512] #2
+#up_sizes = [64,128,256,256] #2
+#up_sizes = [64,128,256,256] #2
+up_sizes = [256,256,512,512] #1
 def dense_block_upsample(net, skip_net, depth, size, growth, name):
   with tf.variable_scope(name):
     net = tf.concat([net, skip_net], maps_dim)
@@ -326,6 +332,35 @@ def dense_block_upsample(net, skip_net, depth, size, growth, name):
     net = BNReluConv(net, size, 'layer')
   return net
   #return dense_block(net, size, growth, name)
+
+def dense_block_upsampleworse(net, skip_net, depth, size, growth, name):
+  with tf.variable_scope(name):
+    num_filters = net.get_shape().as_list()[maps_dim]
+    skip_net = BNReluConv(skip_net, num_filters, 'bottleneck', k=3)
+    net = tf.concat([net, skip_net], maps_dim)
+    #new_size = net.get_shape().as_list()[height_dim:height_dim+2]
+    #depth = resize_tensor(depth, new_size, 'resize_depth')
+    #net = tf.concat([net, skip_net, depth], maps_dim)
+    #num_filters = int(round(num_filters*compression))
+    #num_filters = int(round(num_filters*compression/2))
+    #num_filters = int(round(num_filters*0.3))
+    #net = tf.concat([net, depth], maps_dim)
+    #net = BNReluConv(net, num_filters, 'bottleneck', k=3)
+    print('after bottleneck = ', net)
+    net = BNReluConv(net, size, 'layer')
+  return net
+
+#up_sizes = [256,256,512,512]
+#def dense_block_upsample_sum(net, skip_net, depth, size, growth, name):
+#  with tf.variable_scope(name):
+#    num_maps = net.get_shape().as_list()[maps_dim]
+#    #skip_net = BNReluConv(skip_net, num_maps, 'bottleneck', k=1)
+#    skip_net = BNReluConv(skip_net, num_maps, 'bottleneck', k=3)
+#    net = net + skip_net
+#    print('after sum = ', net)
+#    net = BNReluConv(net, size, 'layer')
+#  return net
+#  #return dense_block(net, size, growth, name)
 
 
 def dense_block_context(net):
@@ -359,7 +394,7 @@ def transition(net, compression, name, stride=2):
   return net, skip_layer
 
 
-def _build(image, depth, is_training=False):
+def _build1gpu(image, depth=None, is_training=False):
   #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
   bn_params['is_training'] = is_training
   with arg_scope([layers.conv2d],
@@ -390,7 +425,7 @@ def _build(image, depth, is_training=False):
     #    first=True, split=True)
     #skip_layers.append([skip, 128, growth_up, 'block0_mid_refine', depth])
 
-    #skip_layers.append([net, up_sizes[0], growth_up, 'block0_refine', depth])
+    skip_layers.append([net, up_sizes[0], growth_up, 'block0_refine', depth])
     net, skip = transition(net, compression, 'block0/transition')
 
     net = dense_block(net, block_sizes[1], growth, 'block1', is_training)
@@ -412,9 +447,13 @@ def _build(image, depth, is_training=False):
     #skip_layers.append([skip, km, 'block3', depth])
 
     with tf.variable_scope('head'):
+      # TODO 7x7 + avg_pool +7x7+ concat ...
       #net = dense_block_context(net)
       print('5x5')
       net = BNReluConv(net, context_size, 'context_conv', k=5)
+      #net1 = BNReluConv(net, context_size//2, 'context_conv1', k=5)
+      #net2 = BNReluConv(net, context_size//2, 'context_conv2', k=5, rate=2)
+      #net = tf.concat([net1, net2], maps_dim)
       #print('7x7')
       #net = BNReluConv(net, context_size, 'context_conv', k=7)
       #print('3 x 3x3')
@@ -452,7 +491,7 @@ def _build(image, depth, is_training=False):
     return logits, mid_logits
 
 
-def _build_2gpus(image, depth, is_training=False):
+def _build(image, depth, is_training=False):
   #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
   bn_params['is_training'] = is_training
   with arg_scope([layers.conv2d],
@@ -462,6 +501,7 @@ def _build_2gpus(image, depth, is_training=False):
       weights_regularizer=layers.l2_regularizer(weight_decay)):
     gpu1 = '/gpu:0'
     gpu2 = '/gpu:1'
+    gpu3 = '/gpu:2'
     #gpu3 = '/gpu:2'
     with tf.device('/gpu:0'):
       with tf.variable_scope('conv0'):
@@ -490,15 +530,16 @@ def _build_2gpus(image, depth, is_training=False):
       net, skip = transition(net, compression, 'block0/transition')
       #skip_layers.append([skip, up_sizes[0], growth_up, 'block0_refine', depth])
 
-      net = dense_block(net, block_sizes[1], growth, 'block1', is_training)
-      #net = dense_block_multigpu(net, block_sizes[1], growth, 'block1', is_training)
+      #net = dense_block(net, block_sizes[1], growth, 'block1', is_training)
+      net = dense_block_multigpu(net, block_sizes[1], growth, 'block1', is_training)
       skip_layers.append([net, up_sizes[1], growth_up, 'block1_refine', depth])
 
       #net, skip = dense_block(net, block_sizes[1], k, 'block1', is_training, split=True)
+    with tf.device(gpu2):
       net, skip = transition(net, compression, 'block1/transition')
       #skip_layers.append([skip, up_sizes[1], growth_up, 'block1_refine', depth])
 
-    with tf.device(gpu2):
+    #with tf.device(gpu2):
       # works the same with split, not 100%
       net, skip = dense_block(net, block_sizes[2], growth, 'block2', is_training, split=True)
       skip_layers.append([skip, up_sizes[2], growth_up, 'block2_mid_refine', depth])
@@ -508,18 +549,24 @@ def _build_2gpus(image, depth, is_training=False):
       net, skip = transition(net, compression, 'block2/transition')
       #skip_layers.append([skip, up_sizes[3], growth_up, 'block2_refine', depth])
       net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
+      # bad on fullres
       #net, skip = dense_block(net, block_sizes[3], growth, 'block3', is_training, split=True)
       #skip_layers.append([skip, up_sizes[3], growth_up, 'block3_refine', depth])
 
+    with tf.device(gpu3):
       with tf.variable_scope('head'):
         #net = dense_block_context(net)
         #print('5x5')
         #net = BNReluConv(net, context_size, 'context_conv', k=5)
         print('7x7 dilated')
         #net = BNReluConv(net, context_size, 'context_conv', k=7)
-        net1 = BNReluConv(net, context_size//2, 'context_conv1', k=7)
-        net2 = BNReluConv(net, context_size//2, 'context_conv2', k=7, rate=2)
-        net = tf.concat([net1, net2], maps_dim)
+        #net1 = BNReluConv(net, context_size//2, 'context_conv1', k=7)
+        net0 = BNReluConv(net, context_size//2, 'context_conv0', k=7)
+        net1 = BNReluConv(net, context_size//2, 'context_conv1', k=7, rate=2)
+        net2 = BNReluConv(net, context_size//2, 'context_conv2', k=7, rate=3)
+        #net = tf.concat([net1, net2], maps_dim)
+        net = tf.concat([net0, net1, net2], maps_dim)
+
         #net = BNReluConv(net, 32, 'context_conv', k=1)
         #print('3 x 3x3')
         #net = BNReluConv(net, context_size, 'context_conv1', k=3)
@@ -533,7 +580,11 @@ def _build_2gpus(image, depth, is_training=False):
           net = refine(net, skip_layer)
           print('after upsampling = ', net)
 
-  with tf.device(gpu2), tf.variable_scope('head'):
+  global loss_gpu
+  #gpu = '/gpu:1'
+  loss_gpu = gpu3
+  #with tf.device(gpu2), tf.variable_scope('head'):
+  with tf.device(gpu3), tf.variable_scope('head'):
     with tf.variable_scope('logits'):
       net = tf.nn.relu(layers.batch_norm(net, **bn_params))
       logits = layers.conv2d(net, FLAGS.num_classes, 1, activation_fn=None,
@@ -693,9 +744,7 @@ def inference(image, constant_shape=True):
 
 #def _multiloss(logits, mid_logits, labels, weights, is_training=True):
 def _multiloss(logits, mid_logits, labels, num_labels, class_hist, is_training):
-  #gpu = '/gpu:1'
-  gpu = '/gpu:0'
-  with tf.device(gpu):
+  with tf.device(loss_gpu):
     max_weight = FLAGS.max_weight
     #max_weight = 10
     #max_weight = 50
@@ -703,6 +752,7 @@ def _multiloss(logits, mid_logits, labels, num_labels, class_hist, is_training):
         logits, labels, num_labels, class_hist, max_weight=max_weight)
     loss2 = losses.weighted_cross_entropy_loss(
         mid_logits, labels, num_labels, class_hist, max_weight=max_weight)
+
     #loss1 = losses.weighted_cross_entropy_loss(logits, labels, weights,
     #    max_weight=max_weight)
     #loss2 = losses.weighted_cross_entropy_loss(mid_logits, labels, weights,
@@ -712,7 +762,9 @@ def _multiloss(logits, mid_logits, labels, num_labels, class_hist, is_training):
     wgt = 0.3 # best
     #wgt = 0.2
     #wgt = 0.4
+
     xent_loss = (1-wgt)*loss1 + wgt*loss2
+    #xent_loss = loss1
 
   all_losses = [xent_loss]
   # get losses + regularization
