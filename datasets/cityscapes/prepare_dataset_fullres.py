@@ -28,7 +28,7 @@ flags.DEFINE_integer('img_height', 1024, '')
 flags.DEFINE_integer('rf_half_size', 128, '')
 flags.DEFINE_string('save_dir',
     '/home/kivan/datasets/Cityscapes/tensorflow/' + str(FLAGS.img_width) +
-    'x' + str(FLAGS.img_height) + '_2mp/', '')
+    'x' + str(FLAGS.img_height) + '_nohood/', '')
 tf.app.flags.DEFINE_integer('num_classes', 19, '')
 
 #flags.DEFINE_integer('cx_start', 0, '')
@@ -49,12 +49,12 @@ def crop_data_split(img, left_end, right_start, clear_overlap=False, fill_val=No
   return [img_left, img_right]
 
 
-#def crop_data(img):
-#  img = np.ascontiguousarray(img[FLAGS.cy_start:FLAGS.cy_end,...])
-#  return [img]
-
 def crop_data(img):
+  img = np.ascontiguousarray(img[FLAGS.cy_start:FLAGS.cy_end,...])
   return [img]
+
+#def crop_data(img):
+#  return [img]
 
 
 def _int64_feature(value):
@@ -150,8 +150,10 @@ def prepare_dataset(name):
       instance_gt_img = ski.data.load(instance_gt_path)
       #instance_gt_img = np.ascontiguousarray(instance_gt_img[cy_start:cy_end,cx_start:cx_end])
       gt_img, car_mask = data_utils.convert_ids(orig_gt_img)
+
       #img[car_mask] = 0
       img[car_mask] = IMG_MEAN
+
       #ski.io.imsave(join('/home/kivan/datasets/Cityscapes/tensorflow/tmp/',
       #              img_prefix + '.png'), img)
       gt_img = gt_img.astype(np.int8)
@@ -187,8 +189,8 @@ def prepare_dataset(name):
 
 
 def main(argv):
-  prepare_dataset('train')
   prepare_dataset('val')
+  prepare_dataset('train')
 
 
 if __name__ == '__main__':

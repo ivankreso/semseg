@@ -28,8 +28,9 @@ class Dataset(object):
     self.subset = subset
     fp = open(subset_path)
     filenames = [line.strip() + '.tfrecords' for line in fp.readlines()]
+    #print(filenames)
     self.data_dir = data_dir
-    self.filenames = [os.path.join(self.data_dir, f) for f in filenames]
+    self.filenames = [join(data_dir, f) for f in filenames]
 
   def num_classes(self):
     return self.num_classes

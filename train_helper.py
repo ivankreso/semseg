@@ -20,17 +20,20 @@ def minimize_fine_tune(opts, loss, global_step, prefix):
   all_vars = tf.trainable_variables()
   #grads = tf.gradients(loss, all_vars)
   grads = tf.gradients(loss, all_vars, colocate_gradients_with_ops=True)
-  resnet_grads_and_vars = []
+  fine_grads_and_vars = []
   head_grads_and_vars = []
   for i, v in enumerate(all_vars):
+    #grads[i] = tf.Print(grads[i], [tf.reduce_mean(grads[i]),
+    #  tf.reduce_sum(grads[i])], message=v.name+' = ', summarize=5)
     if v.name[:4] == prefix:
       print(v.name, ' --> with base learning rate')
-      head_grads_and_vars += [(grads[i], v)]
+      head_grads_and_vars.append((grads[i], v))
     else:
-      resnet_grads_and_vars += [(grads[i], v)]
-  train_op1 = opts[0].apply_gradients(resnet_grads_and_vars, global_step=global_step)
+      fine_grads_and_vars.append((grads[i], v))
+  train_op1 = opts[0].apply_gradients(fine_grads_and_vars, global_step=global_step)
   train_op2 = opts[1].apply_gradients(head_grads_and_vars)
   return tf.group(train_op1, train_op2)
+  #return train_op2
 
 
 def minimize(opt, loss, global_step):

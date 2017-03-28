@@ -36,6 +36,7 @@ def train(model):
 
     # Build a Graph that computes the logits predictions from the inference model.
     train_ops, init_op, init_feed = model.build('train')
+    num_params = train_helper.get_num_params()
     if FLAGS.no_valid is False:
       valid_ops = model.build('validation')
     loss = train_ops[0]
@@ -43,16 +44,18 @@ def train(model):
     num_batches = model.num_batches()
     train_op = model.minimize(loss, global_step, num_batches)
 
+    print('\nNumber of parameters = ', num_params)
     # Create a saver.
     saver = tf.train.Saver(tf.global_variables(), max_to_keep=FLAGS.max_epochs)
 
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
     if init_op != None:
+      print('\nInitializing pretrained weights...')
       sess.run(init_op, feed_dict=init_feed)
 
     if len(FLAGS.resume_path) > 0:
-      print('\nRestoring params from:', FLAGS.resume_path)
+      print('\nResuming training from:', FLAGS.resume_path)
       assert tf.gfile.Exists(FLAGS.resume_path)
       resnet_restore = tf.train.Saver(model.variables_to_restore())
       resnet_restore.restore(sess, FLAGS.resume_path)
@@ -68,13 +71,11 @@ def train(model):
     #summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, graph=sess.graph)
     #TODO tf.summary.FileWriter()
 
-    init_vars = train_helper.get_variables(sess)
+    #init_vars = train_helper.get_variables(sess)
     #train_helper.print_variable_diff(sess, init_vars)
-    variable_map = train_helper.get_variable_map()
-    num_params = train_helper.get_num_params()
-    print('Number of parameters = ', num_params)
+    #variable_map = train_helper.get_variable_map()
     # take the train loss moving average
-    loss_avg_train = variable_map['total_loss/avg:0']
+    #loss_avg_train = variable_map['total_loss/avg:0']
     train_loss_val = 0
     train_data, valid_data = model.init_eval_data()
     ex_start_time = time.time()
@@ -123,7 +124,7 @@ def train(model):
         #if FLAGS.draw_predictions and step % 50 == 0:
         #  model.draw_prediction('train', epoch_num, step, ret_val)
 
-        if step % 30 == 0:
+        if step % 20 == 0:
         #if step % 1 == 0:
           examples_per_sec = FLAGS.batch_size / duration
           sec_per_batch = float(duration)

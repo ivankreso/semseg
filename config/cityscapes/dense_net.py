@@ -2,7 +2,9 @@ import os
 import tensorflow as tf
 import train_helper
 
+#MODEL_PATH = './models/cityscapes/dense_net.py'
 MODEL_PATH = './models/cityscapes/dense_net.py'
+#MODEL_PATH = './models/cityscapes/dense_net_fix_bn.py'
 #MODEL_PATH = './models/cityscapes/dense_net_dilated.py'
 SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/cityscapes',
                         train_helper.get_time_string())
@@ -10,8 +12,6 @@ SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/cityscapes',
 #IMG_WIDTH, IMG_HEIGHT = 1152, 1024
 #DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
-#IMG_WIDTH, IMG_HEIGHT = 2048, 896
-#DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/'
 
 #IMG_WIDTH, IMG_HEIGHT = 640, 272
 
@@ -22,16 +22,26 @@ DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
                            '{}x{}'.format(IMG_WIDTH, IMG_HEIGHT))
 ##                           '{}x{}_jitter'.format(IMG_WIDTH, IMG_HEIGHT))
 
-#IMG_WIDTH = 384
-#IMG_HEIGHT = 164
+#IMG_WIDTH, IMG_HEIGHT = 2048, 896
+#DATASET_DIR = '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024_nohood'
 
 
 #tf.app.flags.DEFINE_string('optimizer', 'Adam', '')
 # best
-tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
+#tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
-tf.app.flags.DEFINE_float('fine_lr_div', 5, '')
-tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
+#tf.app.flags.DEFINE_float('fine_lr_div', 5, '')
+tf.app.flags.DEFINE_float('fine_lr_div', 7, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
+#tf.app.flags.DEFINE_integer('num_epochs_per_decay', 4, '')
+#fix
+tf.app.flags.DEFINE_float('initial_learning_rate', 1e-2, '')
+tf.app.flags.DEFINE_integer('max_epochs', 8, 'Number of epochs to run.')
+#tf.app.flags.DEFINE_integer('max_epochs', 40, 'Number of epochs to run.')
+
+# adam
+#tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
+tf.app.flags.DEFINE_integer('num_epochs_per_decay', 1, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 8, '')
 tf.app.flags.DEFINE_boolean('staircase', True, '.')
@@ -61,7 +71,6 @@ tf.app.flags.DEFINE_integer('max_weight', 10, '')
 tf.app.flags.DEFINE_integer('batch_size', 3, '')
 tf.app.flags.DEFINE_integer('batch_size_valid', 2, '')
 tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
-tf.app.flags.DEFINE_integer('max_epochs', 50, 'Number of epochs to run.')
 
 #tf.app.flags.DEFINE_string('optimizer', 'Momentum', '')
 ##tf.app.flags.DEFINE_float('initial_learning_rate', 2e-4,
@@ -80,7 +89,9 @@ tf.app.flags.DEFINE_float('moving_average_decay', 0.9999, '')
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('train_dir', SAVE_DIR, \
     """Directory where to write event logs and checkpoint.""")
-tf.app.flags.DEFINE_string('resume_path', '', '')
+#tf.app.flags.DEFINE_string('resume_path', '', '')
+tf.app.flags.DEFINE_string('resume_path',
+    '/home/kivan/datasets/results/iccv/05_11_3_08-57-48/model.ckpt', '')
 tf.app.flags.DEFINE_integer('img_width', IMG_WIDTH, '')
 tf.app.flags.DEFINE_integer('img_height', IMG_HEIGHT, '')
 tf.app.flags.DEFINE_integer('img_depth', 3, '')

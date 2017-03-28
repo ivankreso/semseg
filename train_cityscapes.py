@@ -32,20 +32,18 @@ def train(model, train_dataset, valid_dataset):
   #config.operation_timeout_in_ms = 5000   # terminate on long hangs
   #sess = tf.Session(config=config)
   with tf.Session(config=config) as sess:
-    # Create a variable to count the number of train() calls. This equals the
-    # number of batches processed * FLAGS.num_gpus.
-    global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0),
-                                  trainable=False)
-
     # Build a Graph that computes the logits predictions from the inference model.
     train_ops, init_op, init_feed = model.build(train_dataset, is_training=True)
     num_params = train_helper.get_num_params()
+    vars_to_restore = tf.contrib.framework.get_variables_to_restore()
 
     if valid_dataset != None:
       valid_ops = model.build(valid_dataset, is_training=False, reuse=True)
     loss = train_ops[0]
 
     num_batches = model.num_batches(train_dataset)
+    global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0),
+                                  trainable=False)
     train_op = model.minimize(loss, global_step, num_batches)
 
     print('Total number of parameters = ', num_params)
@@ -58,20 +56,26 @@ def train(model, train_dataset, valid_dataset):
     #saver = tf.train.Saver(tf.all_variables())
 
     sess.run(tf.global_variables_initializer())
-    sess.run(tf.local_variables_initializer())
-    if init_op != None:
+    if len(FLAGS.resume_path) > 0:
+      print(f'\nRestoring params from: {FLAGS.resume_path}\n')
+      #print(tf.train.latest_checkpoint(FLAGS.resume_path))
+      #assert tf.gfile.Exists(FLAGS.resume_path)
+      resnet_restore = tf.train.Saver(vars_to_restore)
+      resnet_restore.restore(sess, FLAGS.resume_path)
+    elif init_op != None:
       print('\nInitializing from pretrained weights...')
       sess.run(init_op, feed_dict=init_feed)
-
-    if len(FLAGS.resume_path) > 0:
-      print('\nRestoring params from:', FLAGS.resume_path)
-      assert tf.gfile.Exists(FLAGS.resume_path)
-      resnet_restore = tf.train.Saver(model.variables_to_restore())
-      resnet_restore.restore(sess, FLAGS.resume_path)
+    else:
+      print('All params are using random init')
+    sess.run(tf.local_variables_initializer())
 
     # Build the summary operation based on the TF collection of Summaries.
     #summary_op = tf.merge_all_summaries()
     summary_op = tf.summary.merge_all()
+
+    #ops = sess.graph.get_operations()
+    #for op in ops:
+    #  print(op.name, op.values())
 
     # Start the queue runners.
     coord = tf.train.Coordinator()
@@ -95,6 +99,7 @@ def train(model, train_dataset, valid_dataset):
       #num_batches = model.num_batches(train_dataset)
       model.start_epoch(train_data)
       #for step in range(40):
+      #for step in range(0):
       for step in range(num_batches):
         start_time = time.time()
         run_ops = train_ops + [train_op, global_step]
@@ -191,11 +196,11 @@ def main(argv=None):  # pylint: disable=unused-argument
 
   print('Experiment dir: ' + FLAGS.train_dir)
   print('Dataset dir: ' + FLAGS.dataset_dir)
-  #train_dataset = CityscapesDataset(FLAGS.dataset_dir, ['train'])
-  #valid_dataset = CityscapesDataset(FLAGS.dataset_dir, ['val'])
-  #train(model, train_dataset, valid_dataset)
-  train_dataset = CityscapesDataset(FLAGS.dataset_dir, ['train', 'val'])
-  train(model, train_dataset, None)
+  train_dataset = CityscapesDataset(FLAGS.dataset_dir, ['train'])
+  valid_dataset = CityscapesDataset(FLAGS.dataset_dir, ['val'])
+  train(model, train_dataset, valid_dataset)
+  #train_dataset = CityscapesDataset(FLAGS.dataset_dir, ['train', 'val'])
+  #train(model, train_dataset, None)
 
 
 if __name__ == '__main__':

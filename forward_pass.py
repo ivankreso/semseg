@@ -32,14 +32,16 @@ tf.app.flags.DEFINE_integer('img_height', 1024, '')
 
 #DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/black/full/test'
 #SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/hood/'
-DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/test'
-SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/hood2/'
+DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/mean/full/test'
+SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/submit_75.5'
 
 #DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/black/croped/test'
 #SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/main/'
 
 #NET_DIR = '/home/kivan/datasets/results/iccv/03_7_3_17-57-58/'
-NET_DIR = '/home/kivan/datasets/results/iccv/cityscapes/full_best_16_3_16-25-14/'
+#NET_DIR = '/home/kivan/datasets/results/iccv/cityscapes/full_best_16_3_16-25-14/'
+#NET_DIR = '/home/kivan/datasets/results/tmp/cityscapes/22_3_10-50-51/'
+NET_DIR = '/home/kivan/datasets/results/tmp/cityscapes/28_3_07-01-21/'
 MODEL_PATH = NET_DIR + 'model.py'
 
 #tf.app.flags.DEFINE_integer('img_width', 2048, '')
@@ -93,7 +95,7 @@ def save_predictions(sess, image, logits, softmax):
       #img = img.astype(np.float32)
       #for c in range(3):
       #  img[:,:,c] -= VGG_MEAN[c]
-      img = cv2.imread(join(city_dir, image_list[i]), cv2.IMREAD_COLOR)
+      #img = cv2.imread(join(city_dir, image_list[i]), cv2.IMREAD_COLOR)
       assert img.shape[0] == height and img.shape[1] == width
       img_data = img.reshape(1, height, width, 3)
       out_logits, out_softmax = sess.run([logits, softmax], feed_dict={image : img_data})

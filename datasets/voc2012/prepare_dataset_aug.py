@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import skimage as ski
 import skimage.data
 from tqdm import trange
-import cv2
+#import cv2
 
 import PIL.Image as pimg
 
@@ -28,7 +28,7 @@ FLAGS = tf.app.flags.FLAGS
 flags = tf.app.flags
 flags.DEFINE_string('data_dir', '/home/kivan/datasets/VOC2012', '')
 #flags.DEFINE_string('save_dir', '/home/kivan/datasets/VOC2012/tensorflow', '')
-flags.DEFINE_string('save_dir', '/home/kivan/datasets/VOC2012/tensorflow_aug', '')
+flags.DEFINE_string('save_dir', '/home/kivan/datasets/voc2012_aug/tensorflow', '')
 
 FLAGS = flags.FLAGS
 
@@ -75,7 +75,7 @@ def collect_hist(labels, class_hist):
     class_hist[i] += np.sum(labels==i)
 
 
-def get_label_weights(labels, num_classes, max_wgt=100):
+def get_label_weights(labels, max_wgt=100):
   height = labels.shape[0]
   width = labels.shape[1]
   weights = np.zeros((height, width), dtype=np.float32)
@@ -164,7 +164,7 @@ def prepare_dataset():
     #label_mask = labels >= 0
     #num_labels = np.sum(label_mask)
     #weights = label_mask.astype(np.float32)
-    weights, num_labels = get_label_weights(labels, NUM_CLASSES)
+    weights, num_labels = get_label_weights(labels)
     create_record(img, labels, weights, num_labels, img_name, save_dir)
   #print(class_hist/ class_hist.sum())
 

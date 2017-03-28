@@ -9,7 +9,7 @@ import skimage.data, skimage.transform
 data_dir = '/home/kivan/datasets/Cityscapes/orig/test'
 labels_dir = '/home/kivan/datasets/Cityscapes/orig/gtFine/test'
 #save_dir = '/home/kivan/datasets/Cityscapes/masked/croped/test'
-save_dir = '/home/kivan/datasets/Cityscapes/masked/black/full/test'
+save_dir = '/home/kivan/datasets/Cityscapes/masked/mean/full/test'
 
 
 rgb_mean =  [75, 85, 75]
@@ -28,11 +28,11 @@ for city in cities:
     img[mask_img==2] = 0
     img[mask_img==3] = 0
 
-    #img[mask_img==1] = rgb_mean
+    img[mask_img==1] = rgb_mean
+    height = img.shape[0]
+    img[height-5:,...] = rgb_mean
     #img[mask_img==2] = rgb_mean
     ##img[mask_img==3] = rgb_mean
-    #height = img.shape[0]
-    #img[height-5:,...] = rgb_mean
 
     #img = np.ascontiguousarray(img[:896,...])
     save_path = join(save_dir, city, image_list[i])
