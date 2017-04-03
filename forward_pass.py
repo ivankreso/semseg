@@ -33,6 +33,7 @@ tf.app.flags.DEFINE_integer('img_height', 1024, '')
 #DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/black/full/test'
 #SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/hood/'
 DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/mean/full/test'
+DEPTH_DIR = '/home/kivan/datasets/Cityscapes/2048x1024/depth/test'
 SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/submit_75.5'
 
 #DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/black/croped/test'
@@ -78,27 +79,35 @@ def map_to_submit_ids(img):
   return img_ids
 
 
-def save_predictions(sess, image, logits, softmax):
+def save_predictions(sess, image, logits, softmax, depth):
   width = FLAGS.img_width
   height = FLAGS.img_height
   img_dir = FLAGS.dataset_dir
   cities = next(os.walk(img_dir))[1]
   for city in cities:
-    #if city != 'berlin':
+    depth_dir = join(DEPTH_DIR, city)
+    #if city != 'bielefeld':
     #  continue
     city_dir = join(img_dir, city)
     image_list = next(os.walk(city_dir))[2]
     print(city)
     for i in trange(len(image_list)):
+      #print(image_list[i])
       #img = ski.data.load(img_dir + image_list[i])
       #img = ski.transform.resize(img, (height, width), preserve_range=True, order=3)
       #img = img.astype(np.float32)
       #for c in range(3):
       #  img[:,:,c] -= VGG_MEAN[c]
       #img = cv2.imread(join(city_dir, image_list[i]), cv2.IMREAD_COLOR)
+      img = ski.data.load(join(city_dir, image_list[i]))
+      depth_data = ski.data.load(join(depth_dir, image_list[i])).astype(np.float32)
+      depth_data /= 256.0
       assert img.shape[0] == height and img.shape[1] == width
       img_data = img.reshape(1, height, width, 3)
-      out_logits, out_softmax = sess.run([logits, softmax], feed_dict={image : img_data})
+      depth_data = depth_data.reshape(1, height, width, 1)
+      #out_logits, out_softmax = sess.run([logits, softmax], feed_dict={image : img_data})
+      feed_dict={image:img_data, depth:depth_data}
+      out_logits, out_softmax = sess.run([logits, softmax], feed_dict=feed_dict)
       y = out_logits[0].argmax(2).astype(np.int32)
       #p = np.amax(out_softmax, axis=2)
       #print('Over 90% = ', (p > 0.9).sum() / p.size)
@@ -126,12 +135,14 @@ def main(argv=None):
   #image, labels, weights, num_labels, img_name = \
   #    reader.inputs(dataset)
   batch_shape = (FLAGS.batch_size, FLAGS.img_height, FLAGS.img_width, FLAGS.img_depth)
+  depth_shape = (FLAGS.batch_size, FLAGS.img_height, FLAGS.img_width, 1)
   image = tf.placeholder(tf.float32, shape=batch_shape)
-  logits, mid_logits = model.inference(image)
+  depth = tf.placeholder(tf.float32, shape=depth_shape)
+  logits, mid_logits = model.inference(image, depth)
   softmax = losses.softmax(logits)
   saver = tf.train.Saver()
   saver.restore(sess, model_checkpoint_path)
-  save_predictions(sess, image, logits, softmax)
+  save_predictions(sess, image, logits, softmax, depth)
 
     # Restores from checkpoint
       #loss = model.loss(logits, labels, weights, num_labels)                                         

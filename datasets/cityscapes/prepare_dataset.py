@@ -133,6 +133,7 @@ def prepare_dataset(name):
       img_prefix = img_name[:-4]
       rgb_path = root_dir + city + '/' + img_name
       rgb = ski.data.load(rgb_path)
+      orig_height = rgb.shape[0]
       #rgb = cv2.imread(rgb_path, cv2.IMREAD_COLOR)
       rgb = np.ascontiguousarray(rgb[cy_start:cy_end,cx_start:cx_end,:])
       #rgb = cv2.resize(rgb, (width, height), interpolation=cv2.INTER_CUBIC)
@@ -157,7 +158,9 @@ def prepare_dataset(name):
       if FLAGS.downsample:
         full_gt_img = ski.transform.resize(full_gt_img, (FLAGS.img_height, FLAGS.img_width),
                                            order=0, preserve_range=True).astype(np.uint8)
-      gt_img, car_mask = data_utils.convert_ids(full_gt_img)
+      if cy_end < orig_height:
+        has_hood = False
+      gt_img, car_mask = data_utils.convert_ids(full_gt_img, has_hood)
       #rgb[car_mask] = 0
       rgb[car_mask] = IMG_MEAN
       #print(gt_img[40:60,100:110])

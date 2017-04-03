@@ -266,7 +266,6 @@ def pyramid_pooling(net, size=3):
       print(net)
       pool = BNReluConv(net, pool_dim, k=1, name='bottleneck'+str(i))
       #pool = tf.image.resize_bilinear(pool, [height, width], name='resize_score')
-
       pool = resize_tensor(pool, up_size, name='upsample_level_'+str(i))
       concat_lst.append(pool)
     net = tf.concat(concat_lst, maps_dim)
@@ -728,8 +727,7 @@ def minimize(loss, global_step, num_batches):
   #power = 0.9
   power = 1.0
   #decay_steps = int(num_batches * 30)
-  #decay_steps = 40000
-  decay_steps = 30000
+  decay_steps = num_batches * FLAGS.max_epochs
   lr_fine = tf.train.polynomial_decay(base_lr / fine_lr_div, global_step, decay_steps,
                                       end_learning_rate=0, power=power)
   lr = tf.train.polynomial_decay(base_lr, global_step, decay_steps,

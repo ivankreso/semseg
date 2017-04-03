@@ -31,10 +31,10 @@ DEPTH_STD = 29.21617326
 model_depth = 121
 imagenet_init = True
 #imagenet_init = False
-#FIX
 init_dir = '/home/kivan/datasets/pretrained/dense_net/'
 apply_jitter = True
 #apply_jitter = False
+known_shape = True
 pool_func = layers.avg_pool2d
 #pool_func = layers.max_pool2d
 
@@ -318,11 +318,11 @@ def dense_block_multigpu(net, size, growth, name, gpus, gpu_split,
 up_sizes = [128,128,256,384,512] # 2gpus
 def dense_block_upsample(net, skip_net, depth, size, growth, name):
   with tf.variable_scope(name):
-    new_size = net.get_shape().as_list()[height_dim:height_dim+2]
-    depth = resize_tensor(depth, new_size, 'resize_depth')
-    net = tf.concat([net, skip_net, depth], maps_dim)
+    #new_size = net.get_shape().as_list()[height_dim:height_dim+2]
+    #depth = resize_tensor(depth, new_size, 'resize_depth')
+    #net = tf.concat([net, skip_net, depth], maps_dim)
+    net = tf.concat([net, skip_net], maps_dim)
 
-    #net = tf.concat([net, skip_net], maps_dim)
     num_filters = net.get_shape().as_list()[maps_dim]
     num_filters = int(round(num_filters*compression))
     #num_filters = int(round(num_filters*compression/2))
@@ -401,7 +401,6 @@ def transition(net, compression, name, stride=2):
 def _build1gpu(image, depth=None, is_training=False):
   #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
   bn_params['is_training'] = is_training
-  #bn_params['is_training'] = False
   with arg_scope([layers.conv2d],
       data_format=data_format, stride=1, padding='SAME', activation_fn=None,
       normalizer_fn=None, normalizer_params=None,
@@ -499,25 +498,72 @@ def _build1gpu(image, depth=None, is_training=False):
     return logits, mid_logits
 
 
-def _build(image, depth, is_training=False):
+def pyramid_pooling(net, size=3):
+  print('Pyramid context pooling')
+  with tf.variable_scope('pyramid_context_pooling'):
+    if known_shape:
+      shape = net.get_shape().as_list()
+    else:
+      shape = tf.shape(net)
+    print('shape = ', shape)
+    up_size = shape[height_dim:height_dim+2]
+    shape_info = net.get_shape().as_list()
+    num_maps = net.get_shape().as_list()[maps_dim]
+    #grid_size = [6, 3, 2, 1]
+    pool_dim = int(round(num_maps / size))
+    concat_lst = [net]
+    for i in range(size):
+      #pool = layers.avg_pool2d(net, kernel_size=[kh, kw], stride=[kh, kw], padding='SAME')
+      #pool = layers.avg_pool2d(net, kernel_size=[kh, kh], stride=[kh, kh], padding='SAME')
+      print('before pool = ', net)
+      net = layers.avg_pool2d(net, 2, 2, padding='SAME', data_format=data_format)
+      print(net)
+      pool = BNReluConv(net, pool_dim, k=1, name='bottleneck'+str(i))
+      #pool = tf.image.resize_bilinear(pool, [height, width], name='resize_score')
+
+      pool = resize_tensor(pool, up_size, name='upsample_level_'+str(i))
+      concat_lst.append(pool)
+    net = tf.concat(concat_lst, maps_dim)
+    print('Pyramid pooling out: ', net)
+    net = BNReluConv(net, 512, k=3, name='bottleneck_out')
+    return net
+
+
+def _build(image, depth=None, is_training=False):
   #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
   bn_params['is_training'] = is_training
+  #bn_params['is_training'] = False
+  #bn_params['trainable'] = False
   with arg_scope([layers.conv2d],
       data_format=data_format, stride=1, padding='SAME', activation_fn=None,
       normalizer_fn=None, normalizer_params=None,
       weights_initializer=init_func, biases_initializer=None,
       weights_regularizer=layers.l2_regularizer(weight_decay)):
+  #with arg_scope([layers.conv2d],
+  #    data_format=data_format, stride=1, padding='SAME', activation_fn=None,
+  #    normalizer_fn=None, normalizer_params=None, trainable=False,
+  #    weights_initializer=init_func, biases_initializer=None,
+  #    weights_regularizer=layers.l2_regularizer(weight_decay)):
     gpus = ['/gpu:0', '/gpu:1', '/gpu:2']
     #gpus = ['/gpu:0', '/gpu:0', '/gpu:0']
     #gpu1 = '/gpu:0'
     #gpu2 = '/gpu:1'
     #gpu3 = '/gpu:2'
+  #bn_params['is_training'] = is_training
+  #bn_params['trainable'] = True
+  #with arg_scope([layers.conv2d],
+  #    data_format=data_format, stride=1, padding='SAME', activation_fn=None,
+  #    normalizer_fn=None, normalizer_params=None,
+  #    weights_initializer=init_func, biases_initializer=None,
+  #    weights_regularizer=layers.l2_regularizer(weight_decay)):
+  #  #with tf.device(gpus[0]): #bs=2
+
     with tf.device(gpus[0]): #bs=2
       with tf.variable_scope('conv0'):
         net = layers.conv2d(image, 2*growth, 7, stride=2)
         #net = layers.conv2d(image, 2*growth, 7, stride=1)
         # TODO
-        net = tf.contrib.layers.batch_norm(net, **bn_params)
+        net = layers.batch_norm(net, **bn_params)
         net = tf.nn.relu(net)
 
       #net = layers.max_pool2d(net, 2, stride=2, padding='SAME',
@@ -558,19 +604,25 @@ def _build(image, depth, is_training=False):
 
       net, skip = transition(net, compression, 'block2/transition')
       #skip_layers.append([skip, up_sizes[3], growth_up, 'block2_refine', depth])
-      #net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
+      net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
       #net = dense_block_multigpu(net, block_sizes[3], growth, 'block3', gpus[1:], 15, is_training)
       # bad on fullres
-      net, skip = dense_block(net, block_sizes[3], growth, 'block3', is_training, split=True)
-      skip_layers.append([skip, up_sizes[4], growth_up, 'block3_refine', depth])
+      #net, skip = dense_block(net, block_sizes[3], growth, 'block3', is_training, split=True)
+      #skip_layers.append([skip, up_sizes[4], growth_up, 'block3_refine', depth])
 
+  with arg_scope([layers.conv2d],
+      data_format=data_format, stride=1, padding='SAME', activation_fn=None,
+      normalizer_fn=None, normalizer_params=None,
+      weights_initializer=init_func, biases_initializer=None,
+      weights_regularizer=layers.l2_regularizer(weight_decay)):
     with tf.device(gpus[2]): #bs=2
       with tf.variable_scope('head'):
         #net = dense_block_context(net)
+        #print('7x7')
+        #net = BNReluConv(net, context_size, 'context_conv', k=7)
         #print('5x5')
         #net = BNReluConv(net, context_size, 'context_conv', k=5)
-        print('7x7')
-        net = BNReluConv(net, context_size, 'context_conv', k=7)
+
         #print('7x7 dilated')
         #net = BNReluConv(net, context_size, 'context_conv', k=7, rate=2)
         #net1 = BNReluConv(net, context_size//2, 'context_conv1', k=7)
@@ -585,7 +637,8 @@ def _build(image, depth, is_training=False):
         #net = BNReluConv(net, context_size, 'context_conv1', k=3)
         #net = BNReluConv(net, context_size, 'context_conv2', k=3)
         #net = BNReluConv(net, context_size, 'context_conv3', k=3)
-        #net = pyramid_pooling(net)
+        net = pyramid_pooling(net, size=4)
+        #net = pyramid_pooling(net, size=3)
         print('Before upsampling: ', net)
         mid_logits = net
 
@@ -748,8 +801,8 @@ def build(dataset, is_training, reuse=False):
       return run_ops
 
 
-def inference(image, constant_shape=True):
-  x = normalize_input(image)
+def inference(image, depth=None, constant_shape=True):
+  x = normalize_input(image, depth)
   logits, mid_logits = _build(x, is_training=False)
   return logits, mid_logits
 
@@ -798,13 +851,13 @@ def minimize(loss, global_step, num_batches):
   #base_lr = 1e-2 # for sgd
   base_lr = FLAGS.initial_learning_rate
   #stairs = True
-  stairs = FLAGS.staircase
   fine_lr_div = FLAGS.fine_lr_div
   #fine_lr_div = 10
   print('fine_lr = base_lr / ', fine_lr_div)
   #lr_fine = tf.train.exponential_decay(base_lr / 10, global_step, decay_steps,
   #lr_fine = tf.train.exponential_decay(base_lr / 20, global_step, decay_steps,
 
+  #stairs = FLAGS.staircase
   #lr_fine = tf.train.exponential_decay(base_lr / fine_lr_div, global_step, decay_steps,
   #                                FLAGS.learning_rate_decay_factor, staircase=stairs)
   #lr = tf.train.exponential_decay(base_lr, global_step, decay_steps,
@@ -829,16 +882,17 @@ def minimize(loss, global_step, num_batches):
   tf.summary.scalar('learning_rate', lr)
   # adam works much better here!
   if imagenet_init:
-    #opts = [tf.train.AdamOptimizer(lr_fine), tf.train.AdamOptimizer(lr)]
-    opts = [tf.train.MomentumOptimizer(lr_fine, 0.9), tf.train.MomentumOptimizer(lr, 0.9)]
+    opts = [tf.train.AdamOptimizer(lr_fine), tf.train.AdamOptimizer(lr)]
+    #opts = [tf.train.MomentumOptimizer(lr_fine, 0.9), tf.train.MomentumOptimizer(lr, 0.9)]
     # TODO
     #eps = 1e-5
     #opts = [tf.train.AdamOptimizer(lr_fine, epsilon=eps),
     #        tf.train.AdamOptimizer(lr, epsilon=eps)]
     return train_helper.minimize_fine_tune(opts, loss, global_step, 'head')
+    #return train_helper.minimize(opts[1], loss, global_step)
   else:
-    #opt = tf.train.AdamOptimizer(lr)
-    opt = tf.train.MomentumOptimizer(lr, 0.9)
+    opt = tf.train.AdamOptimizer(lr)
+    #opt = tf.train.MomentumOptimizer(lr, 0.9)
     return train_helper.minimize(opt, loss, global_step)
   #opts = [tf.train.RMSPropOptimizer(lr_fine, momentum=0.9, centered=True),
   #        tf.train.RMSPropOptimizer(lr, momentum=0.9, centered=True)]

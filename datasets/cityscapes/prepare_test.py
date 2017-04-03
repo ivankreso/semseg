@@ -24,9 +24,9 @@ for city in cities:
     img_prefix = image_list[i][:-16]
     mask_path = join(labels_dir, city, img_prefix + '_gtFine_labelIds.png')
     mask_img = ski.data.load(mask_path)
-    img[mask_img==1] = 0
-    img[mask_img==2] = 0
-    img[mask_img==3] = 0
+    #img[mask_img==1] = 0
+    #img[mask_img==2] = 0
+    #img[mask_img==3] = 0
 
     img[mask_img==1] = rgb_mean
     height = img.shape[0]
