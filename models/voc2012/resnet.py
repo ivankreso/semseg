@@ -3,7 +3,7 @@ import tensorflow as tf
 import argparse
 import numpy as np
 import cv2
-
+from os.path import join
 
 import tensorflow.contrib.layers as layers
 from tensorflow.contrib.framework import arg_scope
@@ -13,26 +13,39 @@ import models.resnet.resnet_utils as resnet_utils
 import train_helper
 import eval_helper
 import losses
-import datasets.reader as reader
-from datasets.cityscapes.cityscapes import CityscapesDataset
+import datasets.voc2012.reader as reader
+from datasets.voc2012.dataset import Dataset
 #import datasets.flip_reader as reader
 #import datasets.reader_jitter as reader
 
 FLAGS = tf.app.flags.FLAGS
 
-HEAD_PREFIX = 'head'
+
+# BGR
+data_mean = [103.19996733, 112.43425923, 116.49585869]
+#data_std = [60.37073962, 59.39268441, 60.74823033]
+
+root_dir = '/home/kivan/datasets/voc2012_aug'
+if FLAGS.no_valid:
+  train_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, 'trainval.txt'), 'trainval')
+else:
+  train_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, 'train.txt'), 'train')
+  valid_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, 'val.txt'), 'val')
+
+print('Num training examples = ', train_dataset.num_examples())
 
 train_step_iter = 0
-#imagenet_init = True
-imagenet_init = False
+imagenet_init = True
+#imagenet_init = False
 MODEL_DEPTH = 50
 #MEAN_RGB = [75.2051479, 85.01498926, 75.08929598]
-MEAN_BGR = [75.08929598, 85.01498926, 75.2051479]
+#MEAN_BGR = [75.08929598, 85.01498926, 75.2051479]
 #MEAN_BGR = [103.939, 116.779, 123.68]
 #init_func = layers.variance_scaling_initializer(mode='FAN_OUT')
 init_func = layers.variance_scaling_initializer()
 weight_decay = 1e-4
 apply_jitter = True
+known_shape = True
 
 context_size = 512
 compression = 0.5
@@ -43,9 +56,9 @@ maps_dim = 3
 height_dim = 1
 
 
-def evaluate(name, sess, epoch_num, run_ops, dataset, data):
-  loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation(
-      sess, epoch_num, run_ops, dataset.num_examples() // FLAGS.batch_size_valid)
+def evaluate(name, sess, epoch_num, run_ops, data):
+  loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation_voc2012(
+      sess, epoch_num, run_ops, valid_dataset)
   is_best = False
   if iou > data['best_iou'][0]:
     is_best = True
@@ -66,9 +79,9 @@ def start_epoch(train_data):
 
 def end_epoch(train_data):
   pixacc, iou, _, _, _ = eval_helper.compute_errors(
-      train_conf_mat, 'Train', CityscapesDataset.CLASS_INFO)
+      train_conf_mat, 'Train', train_dataset.class_info)
   is_best = False
-  if len(train_data['iou']) and iou > max(train_data['iou']):
+  if len(train_data['iou']) > 0 and iou > max(train_data['iou']):
     is_best = True
   train_data['iou'].append(iou)
   train_data['acc'].append(pixacc)
@@ -111,9 +124,10 @@ def init_eval_data():
   valid_data['acc'] = []
   return train_data, valid_data
 
-def normalize_input(img, depth):
-  FIX FOR RGB
-  return img - MEAN_BGR, depth - 33
+def normalize_input(img):
+  r, g, b = tf.split(img, 3, axis=maps_dim)
+  img = tf.concat([b, g, r], maps_dim)
+  return img - data_mean
 
 
 def resize_tensor(net, shape, name):
@@ -131,7 +145,6 @@ def refine(net, skip_data):
   num_layers = skip_data[1]
   growth = skip_data[2]
   block_name = skip_data[3]
-  depth = skip_data[4]
 
   #size_top = top_layer.get_shape()[maps_dim].value
   #skip_width = skip_layer.get_shape()[2].value
@@ -146,7 +159,7 @@ def refine(net, skip_data):
     net = resize_tensor(net, up_shape, name='upsample')
     print('\nup = ', net)
     print('skip = ', skip_net)
-    return dense_block_upsample(net, skip_net, depth, num_layers, growth, 'dense_block')
+    return dense_block_upsample(net, skip_net, num_layers, growth, 'dense_block')
 
 
 def ConvBNRelu(net, num_filters, name, k=3):
@@ -161,7 +174,7 @@ def ConvBNRelu(net, num_filters, name, k=3):
 up_sizes = [256,256,512,512]
 growth_up = 32
 #up_sizes = [128,256,512,512]
-def dense_block_upsample(net, skip_net, depth, size, growth, name):
+def dense_block_upsample(net, skip_net, size, growth, name):
   with tf.variable_scope(name):
     net = tf.concat([net, skip_net], maps_dim)
     #new_size = net.get_shape().as_list()[height_dim:height_dim+2]
@@ -182,7 +195,38 @@ def dense_block_upsample(net, skip_net, depth, size, growth, name):
   return net
 
 
-def _build(image, depth, is_training=False):
+def _pyramid_pooling(net, size=4):
+  print('Pyramid context pooling')
+  with tf.variable_scope('pyramid_context_pooling'):
+    if known_shape:
+      shape = net.get_shape().as_list()
+    else:
+      shape = tf.shape(net)
+    print('shape = ', shape)
+    up_size = shape[height_dim:height_dim+2]
+    shape_info = net.get_shape().as_list()
+    num_maps = net.get_shape().as_list()[maps_dim]
+    #grid_size = [6, 3, 2, 1]
+    pool_dim = int(round(num_maps / size))
+    concat_lst = [net]
+    for i in range(size):
+      #pool = layers.avg_pool2d(net, kernel_size=[kh, kw], stride=[kh, kw], padding='SAME')
+      #pool = layers.avg_pool2d(net, kernel_size=[kh, kh], stride=[kh, kh], padding='SAME')
+      print('before pool = ', net)
+      net = layers.avg_pool2d(net, 2, 2, padding='SAME', data_format=data_format)
+      print(net)
+      #pool = BNReluConv(net, pool_dim, k=1, name='bottleneck'+str(i))
+      pool = layers.conv2d(net, pool_dim, kernel_size=1, scope='bottleneck'+str(i))
+      #pool = tf.image.resize_bilinear(pool, [height, width], name='resize_score')
+      pool = resize_tensor(pool, up_size, name='upsample_level_'+str(i))
+      concat_lst.append(pool)
+    net = tf.concat(concat_lst, maps_dim)
+    print('Pyramid pooling out: ', net)
+    #net = BNReluConv(net, 512, k=3, name='bottleneck_out')
+    net = layers.conv2d(net, 512, kernel_size=3, scope='bottleneck_out')
+    return net
+
+def _build(image, is_training=False):
   global bn_params
   bn_params = {
     # Decay for the moving averages.
@@ -262,10 +306,10 @@ def _build(image, depth, is_training=False):
   #l = layers.max_pool2d(l, 3, stride=1, padding='SAME', scope='pool0')
   l = layer(l, 'group0', 64, defs[0], 1, first=True)
   #skip_layers.append([tf.nn.relu(l), km//2, 'group0', depth])
-  skip_layers.append([tf.nn.relu(l), up_sizes[0], growth_up, 'block0_refine', depth])
+  skip_layers.append([tf.nn.relu(l), up_sizes[0], growth_up, 'block0_refine'])
   l = layer(l, 'group1', 128, defs[1], 2)
   #skip_layers.append([tf.nn.relu(l), km//2, 'group1', depth])
-  skip_layers.append([tf.nn.relu(l), up_sizes[1], growth_up, 'block1_refine', depth])
+  skip_layers.append([tf.nn.relu(l), up_sizes[1], growth_up, 'block1_refine'])
 
   #bsz = 2
   #paddings, crops = tf.required_space_to_batch_paddings(tf.shape(l)[1:3], [bsz, bsz])
@@ -274,7 +318,7 @@ def _build(image, depth, is_training=False):
   #l = tf.batch_to_space(l, crops=crops, block_size=bsz)
   l = layer(l, 'group2', 256, defs[2], 2)
   #skip_layers.append([tf.nn.relu(l), km, 'group2', depth])
-  skip_layers.append([tf.nn.relu(l), up_sizes[2], growth_up, 'block2_refine', depth])
+  skip_layers.append([tf.nn.relu(l), up_sizes[2], growth_up, 'block2_refine'])
 
   #bsz = 4
   #paddings, crops = tf.required_space_to_batch_paddings(tf.shape(l)[1:3], [bsz, bsz])
@@ -286,7 +330,6 @@ def _build(image, depth, is_training=False):
   l = tf.nn.relu(l)
   print('resnet:', l)
 
-  context_pool_num = 3
   with tf.variable_scope('head'):
     with arg_scope([layers.conv2d],
         stride=1, padding='SAME', activation_fn=tf.nn.relu,
@@ -294,8 +337,9 @@ def _build(image, depth, is_training=False):
         weights_initializer=init_func,
         weights_regularizer=layers.l2_regularizer(weight_decay)):
       l = layers.conv2d(l, 1024, kernel_size=1, scope='conv1')
-      #l = layers.conv2d(l, context_size, kernel_size=5, scope='conv2')
-      net = _pyramid_pooling(net, size=context_pool_num)
+      #l = layers.conv2d(l, context_size, kernel_size=3, rate=4, scope='conv2')
+      #l = _pyramid_pooling(l, size=4)
+      l = _pyramid_pooling(l, size=2)
       logits_mid = l
       #final_h = l.get_shape().as_list()[1]
       #if final_h >= 10:
@@ -340,7 +384,7 @@ def create_init_op(params):
 
 
 
-def jitter(image, labels, depth):
+def jitter(image, labels, weights):
   with tf.name_scope('jitter'), tf.device('/cpu:0'):
     print('\nJittering enabled')
     global random_flip_tf, resize_width, resize_height
@@ -354,7 +398,7 @@ def jitter(image, labels, depth):
     #weights_split = tf.unstack(weights, axis=0)
     #labels_split = tf.unstack(labels, axis=0)
     out_img = []
-    out_depth = []
+    out_wgt = []
     #out_weights = []
     out_labels = []
     #image = tf.Print(image, [image[0]], message='img1 = ', summarize=10)
@@ -363,9 +407,9 @@ def jitter(image, labels, depth):
         lambda: tf.image.flip_left_right(image[i]), lambda: image[i]))
         #lambda: tf.image.flip_left_right(image_split[i]),
         #lambda: image_split[i]))
-      out_depth.append(tf.cond(random_flip_tf[i],
-        lambda: tf.image.flip_left_right(depth[i]),
-        lambda: depth[i]))
+      out_wgt.append(tf.cond(random_flip_tf[i],
+        lambda: tf.image.flip_left_right(weights[i]),
+        lambda: weights[i]))
       #print(cond_op)
       #image_split[i] = tf.assign(image_split[i], cond_op)
       #image[i] = tf.cond(random_flip_tf, lambda: tf.image.flip_left_right(image[i]),
@@ -378,7 +422,7 @@ def jitter(image, labels, depth):
       #out_weights.append(tf.cond(random_flip_tf[i], lambda: tf.image.flip_left_right(weights[i]),
       #                   lambda: weights[i]))
     image = tf.stack(out_img, axis=0)
-    depth = tf.stack(out_depth, axis=0)
+    weights = tf.stack(out_wgt, axis=0)
     #weights = tf.stack(out_weights, axis=0)
     labels = tf.stack(out_labels, axis=0)
     #image = tf.Print(image, [random_flip_tf], message='random_flip_tf = ', summarize=10)
@@ -390,7 +434,7 @@ def jitter(image, labels, depth):
     #labels = tf.image.resize_nearest_neighbor(labels, [resize_height, resize_width])
     #weights = tf.image.resize_nearest_neighbor(weights, [resize_height, resize_width])
     #return image, labels, weights, depth
-    return image, labels, depth
+    return image, labels, weights
 
 
 def _get_train_feed():
@@ -412,21 +456,27 @@ def _get_train_feed():
   return feed_dict
 
 
+def build(mode):
+  if mode == 'train':
+    is_training = True
+    reuse = False
+    dataset = train_dataset
+  elif mode == 'validation':
+    is_training = False
+    reuse = True
+    dataset = valid_dataset
 
-def build(dataset, is_training, reuse=False):
   with tf.variable_scope('', reuse=reuse):
-    #x, labels, weights, depth, img_names = \
-    x, labels, num_labels, class_hist, depth, img_names = \
-        reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
+    x, labels, weights, num_labels, img_names = \
+      reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
     if is_training and apply_jitter:
-      x, labels, depth = jitter(x, labels, depth)
-    x, depth = normalize_input(x, depth)
+      x, labels, weights = jitter(x, labels, weights)
+    x = normalize_input(x)
 
     #logits = _build(x, depth, is_training)
     #total_loss = _loss(logits, labels, weights, is_training)
-    logits, mid_logits = _build(x, depth, is_training)
-    #total_loss = _multiloss(logits, mid_logits, labels, weights, is_training)
-    total_loss = _multiloss(logits, mid_logits, labels, num_labels, class_hist, is_training)
+    logits, mid_logits = _build(x, is_training)
+    total_loss = _multiloss(logits, mid_logits, labels, weights, num_labels, is_training)
 
     if is_training and imagenet_init:
       MODEL_PATH ='/home/kivan/datasets/pretrained/resnet/ResNet'+str(MODEL_DEPTH)+'.npy'
@@ -451,24 +501,27 @@ def build(dataset, is_training, reuse=False):
     else:
       return run_ops
 
+
 def inference(image, constant_shape=True):
+  global known_shape
+  known_shape = constant_shape
   x = normalize_input(image)
   logits, mid_logits = _build(x, is_training=False)
   return logits, mid_logits
 
 
 #def _multiloss(logits, mid_logits, labels, weights, is_training=True):
-def _multiloss(logits, mid_logits, labels, num_labels, class_hist, is_training):
+def _multiloss(logits, mid_logits, labels, weights, num_labels, is_training):
   #gpu = '/gpu:1'
   gpu = '/gpu:0'
   with tf.device(gpu):
     max_weight = FLAGS.max_weight
     #max_weight = 10
     #max_weight = 50
-    loss1 = losses.weighted_cross_entropy_loss(
-        logits, labels, num_labels, class_hist, max_weight=max_weight)
-    loss2 = losses.weighted_cross_entropy_loss(
-        mid_logits, labels, num_labels, class_hist, max_weight=max_weight)
+    loss1 = losses.weighted_cross_entropy_loss_dense(
+        logits, labels, weights, num_labels, max_weight=max_weight)
+    loss2 = losses.weighted_cross_entropy_loss_dense(
+        mid_logits, labels, weights, num_labels, max_weight=max_weight)
     #loss1 = losses.weighted_cross_entropy_loss(logits, labels, weights,
     #    max_weight=max_weight)
     #loss2 = losses.weighted_cross_entropy_loss(mid_logits, labels, weights,
@@ -498,44 +551,43 @@ def minimize(loss, global_step, num_batches):
   global lr
   #base_lr = 1e-2 # for sgd
   base_lr = FLAGS.initial_learning_rate
-  #stairs = True
-  stairs = FLAGS.staircase
-  fine_lr_div = FLAGS.fine_lr_div
+  stairs = True
+  #stairs = False
+  #TODO
+  #fine_lr_div = 5
   #fine_lr_div = 10
+  fine_lr_div = 7
   print('fine_lr = base_lr / ', fine_lr_div)
   #lr_fine = tf.train.exponential_decay(base_lr / 10, global_step, decay_steps,
   #lr_fine = tf.train.exponential_decay(base_lr / 20, global_step, decay_steps,
 
-  lr_fine = tf.train.exponential_decay(base_lr / fine_lr_div, global_step, decay_steps,
-                                  FLAGS.learning_rate_decay_factor, staircase=stairs)
-  lr = tf.train.exponential_decay(base_lr, global_step, decay_steps,
-                                  FLAGS.learning_rate_decay_factor, staircase=stairs)
+  #power = 0.9
+  power = 1.0
+  #decay_steps = int(num_batches * 30)
+  decay_steps = num_batches * FLAGS.max_epochs
+  lr_fine = tf.train.polynomial_decay(base_lr / fine_lr_div, global_step, decay_steps,
+                                      end_learning_rate=0, power=power)
+  lr = tf.train.polynomial_decay(base_lr, global_step, decay_steps,
+                                 end_learning_rate=0, power=power)
+  #lr = tf.Print(lr, [lr], message='lr = ', summarize=10)
 
-  ## TODO
-  #base_lr = 1e-3
-  #end_lr = 1e-5
-  #decay_steps = num_batches * 20
-  #lr_fine = tf.train.polynomial_decay(base_lr / fine_lr_div, global_step,
-  #                                    decay_steps, end_lr, power=1)
-  #lr = tf.train.polynomial_decay(base_lr, global_step, decay_steps, end_lr, power=1)
-  ##lr = tf.Print(lr, [lr], message='lr = ', summarize=10)
-
+  #lr_fine = tf.train.exponential_decay(base_lr / fine_lr_div, global_step, decay_steps,
+  #                                FLAGS.learning_rate_decay_factor, staircase=stairs)
+  #lr = tf.train.exponential_decay(base_lr, global_step, decay_steps,
+  #                                FLAGS.learning_rate_decay_factor, staircase=stairs)
   tf.summary.scalar('learning_rate', lr)
   # adam works much better here!
   if imagenet_init:
-    opts = [tf.train.AdamOptimizer(lr_fine), tf.train.AdamOptimizer(lr)]
-    # TODO
-    #eps = 1e-5
-    #opts = [tf.train.AdamOptimizer(lr_fine, epsilon=eps),
-    #        tf.train.AdamOptimizer(lr, epsilon=eps)]
+    #opts = [tf.train.AdamOptimizer(lr_fine), tf.train.AdamOptimizer(lr)]
+    opts = [tf.train.MomentumOptimizer(lr_fine, 0.9), tf.train.MomentumOptimizer(lr, 0.9)]
     return train_helper.minimize_fine_tune(opts, loss, global_step, 'head')
   else:
-    opt = tf.train.AdamOptimizer(lr)
+    #opt = tf.train.AdamOptimizer(lr)
+    opt = tf.train.MomentumOptimizer(lr, 0.9)
     return train_helper.minimize(opt, loss, global_step)
   #opts = [tf.train.RMSPropOptimizer(lr_fine, momentum=0.9, centered=True),
   #        tf.train.RMSPropOptimizer(lr, momentum=0.9, centered=True)]
   #opts = [tf.train.MomentumOptimizer(lr_fine, 0.9), tf.train.MomentumOptimizer(lr, 0.9)]
-
 
 
 def train_step(sess, run_ops):
@@ -548,7 +600,5 @@ def train_step(sess, run_ops):
   train_step_iter += 1
   return vals
 
-
-def num_batches(dataset):
-  return dataset.num_examples() // FLAGS.batch_size
-  #return 1
+def num_batches():
+  return train_dataset.num_examples() // FLAGS.batch_size

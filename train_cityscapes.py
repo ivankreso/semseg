@@ -82,10 +82,11 @@ def train(model, train_dataset, valid_dataset):
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
     #summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, graph=sess.graph)
-    #TODO tf.summary.FileWriter()
+    summary_writer = tf.summary.FileWriter(FLAGS.train_dir, graph=sess.graph)
 
     #init_vars = train_helper.get_variables(sess)
     #train_helper.print_variable_diff(sess, init_vars)
+
     #variable_map = train_helper.get_variable_map()
     # take the train loss moving average
     #loss_avg_train = variable_map['total_loss/avg:0']
@@ -104,10 +105,11 @@ def train(model, train_dataset, valid_dataset):
         start_time = time.time()
         run_ops = train_ops + [train_op, global_step]
         #run_ops = [train_op, loss, logits, labels, draw_data, img_name, global_step]
-        if False:
+        #if False:
         #if step % 400 == 0:
-          run_ops += [summary_op]
-          #run_ops += [summary_op]
+        if step == 0:
+          run_ops.append(summary_op)
+          ret_val = model.train_step(sess, run_ops)
           loss_val = ret_val[0]
           summary_str = ret_val[-1]
           global_step_val = ret_val[-2]

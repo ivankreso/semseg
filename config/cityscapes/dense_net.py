@@ -3,7 +3,7 @@ import tensorflow as tf
 import train_helper
 
 #MODEL_PATH = './models/cityscapes/dense_net.py'
-MODEL_PATH = './models/cityscapes/dense_net.py'
+MODEL_PATH = './models/cityscapes/dense_net_jitter.py'
 #MODEL_PATH = './models/cityscapes/dense_net_fix_bn.py'
 #MODEL_PATH = './models/cityscapes/dense_net_dilated.py'
 SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/cityscapes',
@@ -46,14 +46,20 @@ DATASET_DIR = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
 # 1e-3 to small
 #tf.app.flags.DEFINE_float('initial_learning_rate', 1e-2, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 4e-2, '')
-tf.app.flags.DEFINE_float('fine_lr_div', 10, '')
+#tf.app.flags.DEFINE_float('fine_lr_div', 10, '')
+# 1.5% bolje
+tf.app.flags.DEFINE_float('fine_lr_div', 5, '')
 #tf.app.flags.DEFINE_integer('max_epochs', 8, 'Number of epochs to run.')
 #tf.app.flags.DEFINE_integer('max_epochs', 40, 'Number of epochs to run.')
-#tf.app.flags.DEFINE_integer('max_epochs', 30, 'Number of epochs to run.')
-tf.app.flags.DEFINE_integer('max_epochs', 20, 'Number of epochs to run.')
+
+# 30 1% better then 20 on adam
+tf.app.flags.DEFINE_integer('max_epochs', 30, 'Number of epochs to run.')
+tf.app.flags.DEFINE_integer('num_iters', 13000, '')
 
 # 69.45
-tf.app.flags.DEFINE_float('initial_learning_rate', 7e-4, '')
+#tf.app.flags.DEFINE_float('initial_learning_rate', 7e-4, '')
+tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
+#tf.app.flags.DEFINE_float('initial_learning_rate', 3e-4, '')
 # adam
 #tf.app.flags.DEFINE_float('initial_learning_rate', 4e-4, '')
 tf.app.flags.DEFINE_integer('num_epochs_per_decay', 1, '')
@@ -61,6 +67,7 @@ tf.app.flags.DEFINE_integer('num_epochs_per_decay', 1, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 8, '')
 #tf.app.flags.DEFINE_boolean('staircase', True, '.')
 #tf.app.flags.DEFINE_integer('max_weight', 1, '')
+# 10 0.5% better then 1
 tf.app.flags.DEFINE_integer('max_weight', 10, '')
 #tf.app.flags.DEFINE_integer('max_weight', 50, '')
 
@@ -120,6 +127,7 @@ tf.app.flags.DEFINE_integer('num_classes', 19, '')
 tf.app.flags.DEFINE_boolean('log_device_placement', False, 'Whether to log device placement.')
 tf.app.flags.DEFINE_boolean('draw_predictions', False, 'Whether to draw.')
 tf.app.flags.DEFINE_boolean('save_net', True, 'Whether to save.')
+
 
 tf.app.flags.DEFINE_integer('seed', 66478, '')
 

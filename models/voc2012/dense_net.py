@@ -7,6 +7,8 @@ from os.path import join
 
 import tensorflow.contrib.layers as layers
 from tensorflow.contrib.framework import arg_scope
+import skimage as ski
+import skimage.io
 
 import libs.cylib as cylib
 import train_helper
@@ -172,7 +174,6 @@ def normalize_input(img):
   with tf.name_scope('input'), tf.device('/cpu:0'):
     if data_format == 'NCHW':
       img = tf.transpose(img, perm=[0,3,1,2])
-    if data_format == 'NCHW':
       mean = tf.constant(data_mean, dtype=tf.float32, shape=[1,3,1,1])
       std = tf.constant(data_std, dtype=tf.float32, shape=[1,3,1,1])
     else:
@@ -235,6 +236,7 @@ def BNReluConv(net, num_filters, name, k=3, rate=1, first=False, concat=None):
       # TODO check this
       relu = None
       if not first:
+        # TODO try Relu -> BN
         net = tf.contrib.layers.batch_norm(net, **bn_params)
         net = tf.nn.relu(net)
         relu = net
@@ -244,7 +246,8 @@ def BNReluConv(net, num_filters, name, k=3, rate=1, first=False, concat=None):
       net = layers.conv2d(net, num_filters, kernel_size=k, rate=rate)
     return net
 
-def pyramid_pooling(net, size=3):
+
+def _pyramid_pooling(net, size=3):
   print('Pyramid context pooling')
   with tf.variable_scope('pyramid_context_pooling'):
     if known_shape:
@@ -272,6 +275,7 @@ def pyramid_pooling(net, size=3):
     print('Pyramid pooling out: ', net)
     net = BNReluConv(net, 512, k=3, name='bottleneck_out')
     return net
+
 
 def layer(net, num_filters, name, is_training, first):
   with tf.variable_scope(name):
@@ -389,14 +393,16 @@ def dense_block_upsample_worse(net, skip_net, size, growth, name):
 # try stronger upsampling
 #up_sizes = [64,128,256,512] # good
 up_sizes = [128,256,256,512] # good
+#up_sizes = [256,256,512,512] # good
 #up_sizes = [128,256,384,512] # 0.5% worse then up
 #up_sizes = [32,64,128,256]
 def dense_block_upsample(net, skip_net, size, growth, name):
   with tf.variable_scope(name):
     # TODO
-    #num_filters = net.get_shape().as_list()[maps_dim]
-    #skip_net = BNReluConv(skip_net, num_filters, 'bottleneck', k=1)
-    net = tf.concat([net, skip_net], maps_dim)
+    num_filters = net.get_shape().as_list()[maps_dim]
+    skip_net = BNReluConv(skip_net, num_filters, 'bottleneck', k=1)
+    #net = tf.concat([net, skip_net], maps_dim)
+    net = net + skip_net
     #net = BNReluConv(net, num_filters, 'bottleneck', k=3)
     print('after concat = ', net)
     net = BNReluConv(net, size, 'layer')
@@ -488,11 +494,11 @@ def _build(image, is_training=False):
     #skip_layers.append([skip, up_sizes[1], growth_up, 'block1_refine'])
 
     # works the same with split, not 100%
-    context_pool_num = 3
-    net, skip = dense_block(net, block_sizes[2], growth, 'block2', is_training, split=True)
-    skip_layers.append([skip, up_sizes[2], growth_up, 'block2_mid_refine'])
-    #context_pool_num = 4
-    #net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
+    #context_pool_num = 3
+    #net, skip = dense_block(net, block_sizes[2], growth, 'block2', is_training, split=True)
+    #skip_layers.append([skip, up_sizes[2], growth_up, 'block2_mid_refine'])
+    context_pool_num = 4
+    net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
     skip_layers.append([net, up_sizes[3], growth_up, 'block2_refine'])
     net, _ = transition(net, compression, 'block2/transition')
     #skip_layers.append([skip, up_sizes[3], growth_up, 'block2_refine'])
@@ -503,7 +509,9 @@ def _build(image, is_training=False):
     #skip_layers.append([skip, up_sizes[-1], growth_up, 'block3_refine'])
 
     with tf.variable_scope('head'):
-      net = pyramid_pooling(net, size=context_pool_num)
+      net = BNReluConv(net, 512, 'bottleneck', k=1)
+      net = _pyramid_pooling(net, size=context_pool_num)
+      #net = pyramid_pooling2(net, size=context_pool_num)
       #layer {
       #  name: "conv5_4/dropout"
       #  type: "Dropout"
@@ -529,13 +537,14 @@ def _build(image, is_training=False):
 
   with tf.variable_scope('head'):
     with tf.variable_scope('logits'):
-      net = tf.nn.relu(layers.batch_norm(net, **bn_params))
+      #net = tf.nn.relu(layers.batch_norm(net, **bn_params))
+      net = tf.nn.relu(net)
       logits = layers.conv2d(net, FLAGS.num_classes, 1, activation_fn=None,
                              data_format=data_format)
 
     with tf.variable_scope('mid_logits'):
-      # dont forget bn and relu here
-      mid_logits = tf.nn.relu(layers.batch_norm(mid_logits, **bn_params))
+      #mid_logits = tf.nn.relu(layers.batch_norm(mid_logits, **bn_params))
+      mid_logits = tf.nn.relu(mid_logits)
       mid_logits = layers.conv2d(mid_logits, FLAGS.num_classes, 1, activation_fn=None,
                                  data_format=data_format)
 
@@ -610,6 +619,10 @@ def jitter(image, labels, weights):
       global known_shape
       known_shape = False
       image = tf.image.resize_bicubic(image, [resize_height, resize_width])
+      #image = tf.image.resize_bilinear(image, [resize_height, resize_width])
+      image = tf.round(image)
+      image = tf.minimum(255.0, image)
+      image = tf.maximum(0.0, image)
       labels = tf.image.resize_nearest_neighbor(labels, [resize_height, resize_width])
       # TODO is this safe for zero wgts?
       weights = tf.image.resize_nearest_neighbor(weights, [resize_height, resize_width])
@@ -623,8 +636,11 @@ def _get_train_feed():
   #resize_scale = np.random.uniform(0.5, 2)
   #resize_scale = np.random.uniform(0.4, 1.5)
   #resize_scale = np.random.uniform(0.5, 1.2)
-  min_resize = 0.7
-  max_resize = 1.3
+  #min_resize = 0.7
+  #min_resize = 1
+  min_resize = 0.8
+  max_resize = 1.2
+  #max_resize = 1
   if train_step_iter == 0:
     resize_scale = max_resize
   else:
@@ -650,6 +666,7 @@ def build(mode):
       reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
     if is_training and apply_jitter:
       x, labels, weights = jitter(x, labels, weights)
+    image = x
     x = normalize_input(x)
 
     #logits = _build(x, depth, is_training)
@@ -664,11 +681,13 @@ def build(mode):
       init_op, init_feed = create_init_op(init_map)
     else:
       init_op, init_feed = None, None
-    run_ops = [total_loss, logits, labels, img_names]
+    train_run_ops = [total_loss, logits, labels, img_names]
+    #train_run_ops = [total_loss, logits, labels, img_names, image]
+    val_run_ops = [total_loss, logits, labels, img_names]
     if is_training:
-      return run_ops, init_op, init_feed
+      return train_run_ops, init_op, init_feed
     else:
-      return run_ops
+      return val_run_ops
 
 
 def inference(image, constant_shape=True):
@@ -684,9 +703,9 @@ def _multiloss(logits, mid_logits, labels, weights, num_labels, is_training=True
   #loss2 = losses.cross_entropy_loss(mid_logits, labels, weights, num_labels)
   max_weight = 10
   #max_weight = 1
-  loss1 = losses.weighted_cross_entropy_loss_old(logits, labels, weights, num_labels,
+  loss1 = losses.weighted_cross_entropy_loss_dense(logits, labels, weights, num_labels,
       max_weight=max_weight)
-  loss2 = losses.weighted_cross_entropy_loss_old(mid_logits, labels, weights, num_labels,
+  loss2 = losses.weighted_cross_entropy_loss_dense(mid_logits, labels, weights, num_labels,
       max_weight=max_weight)
   #wgt = 0.4
   #xent_loss = loss1 + wgt * loss2
@@ -717,15 +736,15 @@ def minimize(loss, global_step, num_batches):
   stairs = True
   #stairs = False
   #TODO
-  #fine_lr_div = 5
+  fine_lr_div = 5
   #fine_lr_div = 10
-  fine_lr_div = 7
+  #fine_lr_div = 7
   print('fine_lr = base_lr / ', fine_lr_div)
   #lr_fine = tf.train.exponential_decay(base_lr / 10, global_step, decay_steps,
   #lr_fine = tf.train.exponential_decay(base_lr / 20, global_step, decay_steps,
 
-  #power = 0.9
-  power = 1.0
+  power = 0.9
+  #power = 1.0
   #decay_steps = int(num_batches * 30)
   decay_steps = num_batches * FLAGS.max_epochs
   lr_fine = tf.train.polynomial_decay(base_lr / fine_lr_div, global_step, decay_steps,
@@ -762,6 +781,15 @@ def train_step(sess, run_ops):
   else:
     vals = sess.run(run_ops)
   train_step_iter += 1
+  #img = vals[-3]
+  #print(img.shape)
+  ##print(img.mean())
+  #for i in range(img.shape[0]):
+  #  rgb = img[i]
+  #  print(rgb.min())
+  #  print(rgb.max())
+  #  ski.io.imsave(join('/home/kivan/datasets/results/tmp/debug', str(i)+'.png'),
+  #                rgb.astype(np.uint8))
   return vals
 
 

@@ -29,7 +29,7 @@ def minimize_fine_tune(opts, loss, global_step, prefix):
       print(v.name, ' --> with base learning rate')
       head_grads_and_vars.append((grads[i], v))
     else:
-      print(v.name, ' --> with fine tune learning rate')
+      #print(v.name, ' --> with fine tune learning rate')
       fine_grads_and_vars.append((grads[i], v))
   if len(fine_grads_and_vars) > 0:
     train_op1 = opts[0].apply_gradients(fine_grads_and_vars, global_step=global_step)
@@ -75,7 +75,7 @@ def print_variable_diff(sess, init_vars):
     v1 = curr_vars[k]
     norm = np.linalg.norm(v0-v1)
     mae = (np.absolute(v0-v1)).mean()
-    print(k, ' --> ', norm, ' :: ', mae)
+    print(k, ' --> L2 norm = ', norm, ' :: MAE = ', mae)
 
 def get_variable_map():
   var_list = tf.global_variables()

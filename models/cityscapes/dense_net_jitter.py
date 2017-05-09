@@ -11,7 +11,7 @@ import train_helper
 import losses
 import eval_helper
 #import datasets.reader_rgb as reader
-import datasets.reader as reader
+import datasets.reader_jitter as reader
 from datasets.cityscapes.cityscapes import CityscapesDataset
 
 FLAGS = tf.app.flags.FLAGS
@@ -95,9 +95,22 @@ bn_params = {
 }
 
 
-def evaluate(name, sess, epoch_num, run_ops, dataset, data):
+train_data = {}
+valid_data = {}
+train_data['lr'] = []
+train_data['loss'] = []
+train_data['iou'] = []
+train_data['acc'] = []
+train_data['best_iou'] = [0, 0]
+valid_data['best_iou'] = [0, 0]
+valid_data['loss'] = []
+valid_data['iou'] = []
+valid_data['acc'] = []
+
+
+def evaluate(name, sess, epoch_num, run_ops, num_examples, data):
   loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation(
-      sess, epoch_num, run_ops, dataset.num_examples() // FLAGS.batch_size_valid)
+      sess, epoch_num, run_ops, num_examples // FLAGS.batch_size_valid)
   is_best = False
   if iou > data['best_iou'][0]:
     is_best = True
@@ -149,18 +162,7 @@ def print_results(train_data, valid_data):
   print('Best validation IOU = %.2f (epoch %d)\n' % tuple(valid_data['best_iou']))
 
 
-def init_eval_data():
-  train_data = {}
-  valid_data = {}
-  train_data['lr'] = []
-  train_data['loss'] = []
-  train_data['iou'] = []
-  train_data['acc'] = []
-  train_data['best_iou'] = [0, 0]
-  valid_data['best_iou'] = [0, 0]
-  valid_data['loss'] = []
-  valid_data['iou'] = []
-  valid_data['acc'] = []
+def get_eval_data():
   return train_data, valid_data
 
 
@@ -210,7 +212,11 @@ def refine(net, skip_data):
   #TODO try convolution2d_transpose
   #up_shape = tf.shape(skip_net)[height_dim:height_dim+2]
   with tf.variable_scope(block_name):
-    up_shape = skip_net.get_shape().as_list()[height_dim:height_dim+2]
+    if known_shape:
+      up_shape = skip_net.get_shape().as_list()[height_dim:height_dim+2]
+    else:
+      up_shape = tf.shape(skip_net)[height_dim:height_dim+2]
+    #up_shape = skip_net.get_shape().as_list()[height_dim:height_dim+2]
     net = resize_tensor(net, up_shape, name='upsample')
     print('\nup = ', net)
     print('skip = ', skip_net)
@@ -712,10 +718,19 @@ def _build(image, depth=None, is_training=False):
 
         net = BNReluConv(net, context_size, 'context_conv', k=1)
 
-        #print('7x7 dilated')
-        net0 = BNReluConv(net, context_size//2, 'context_conv0', k=3)
-        net1 = BNReluConv(net, context_size//2, 'context_conv1', k=3, rate=2)
-        net = tf.concat([net0, net1], maps_dim)
+        ##print('7x7 dilated')
+        #net.set_shape([FLAGS.batch_size, None, None, None])
+        #print('Before upsampling: ', net)
+        #net0 = BNReluConv(net, context_size//2, 'context_conv0', k=3)
+        #print('Before upsampling0: ', net0)
+        #net1 = BNReluConv(net, context_size//2, 'context_conv1', k=3, rate=2)
+        ##net1 = BNReluConv(net, context_size//2, 'context_conv1', k=3)
+        ##shape = tf.shape(net1)
+        ##shape[1] = context_size//2
+        #net1.set_shape([None, context_size//2, None, None])
+        #print('Before upsampling1: ', net1)
+        #net = tf.concat([net0, net1], maps_dim)
+        net = BNReluConv(net, context_size, 'context_conv1', k=3)
 
         #net0 = BNReluConv(net, context_size//4, 'context_conv0', k=3)
         #net1 = BNReluConv(net, context_size//4, 'context_conv1', k=3, rate=2)
@@ -792,7 +807,7 @@ def create_init_op(params):
 
 
 #def jitter(image, labels, weights, depth):
-def jitter(image, labels, depth):
+def jitter(image, labels, depth=None):
   with tf.name_scope('jitter'), tf.device('/cpu:0'):
     print('\nJittering enabled')
     global random_flip_tf, resize_width, resize_height
@@ -815,9 +830,10 @@ def jitter(image, labels, depth):
         lambda: tf.image.flip_left_right(image[i]), lambda: image[i]))
         #lambda: tf.image.flip_left_right(image_split[i]),
         #lambda: image_split[i]))
-      out_depth.append(tf.cond(random_flip_tf[i],
-        lambda: tf.image.flip_left_right(depth[i]),
-        lambda: depth[i]))
+      if depth is not None:
+        out_depth.append(tf.cond(random_flip_tf[i],
+          lambda: tf.image.flip_left_right(depth[i]),
+          lambda: depth[i]))
       #print(cond_op)
       #image_split[i] = tf.assign(image_split[i], cond_op)
       #image[i] = tf.cond(random_flip_tf, lambda: tf.image.flip_left_right(image[i]),
@@ -830,7 +846,8 @@ def jitter(image, labels, depth):
       #out_weights.append(tf.cond(random_flip_tf[i], lambda: tf.image.flip_left_right(weights[i]),
       #                   lambda: weights[i]))
     image = tf.stack(out_img, axis=0)
-    depth = tf.stack(out_depth, axis=0)
+    if depth is not None:
+      depth = tf.stack(out_depth, axis=0)
     #weights = tf.stack(out_weights, axis=0)
     labels = tf.stack(out_labels, axis=0)
     #image = tf.Print(image, [random_flip_tf], message='random_flip_tf = ', summarize=10)
@@ -842,13 +859,19 @@ def jitter(image, labels, depth):
     #labels = tf.image.resize_nearest_neighbor(labels, [resize_height, resize_width])
     #weights = tf.image.resize_nearest_neighbor(weights, [resize_height, resize_width])
     #return image, labels, weights, depth
-    return image, labels, depth
+    if depth is not None:
+      return image, labels, depth
+    return image, labels
 
 
 def _get_train_feed():
   global random_flip_tf, resize_width, resize_height
   #random_flip = int(np.random.choice(2, 1))
   random_flip = np.random.choice(2, FLAGS.batch_size).astype(np.bool)
+
+  #stack_idx_data = np.int32(np.random.choice(FLAGS.num_stacks))
+  #print(stack_idx_data)
+  #stack_idx_data = 0
   #resize_scale = np.random.uniform(0.5, 2)
   #resize_scale = np.random.uniform(0.4, 1.5)
   #resize_scale = np.random.uniform(0.5, 1.2)
@@ -892,18 +915,23 @@ def build_2loss(dataset, is_training, reuse=False):
     else:
       return run_ops
 
-def build(dataset, is_training, reuse=False):
+def build(filenames, size, is_training, reuse=False):
   with tf.variable_scope('', reuse=reuse):
     #x, labels, weights, depth, img_names = \
-    x, labels, num_labels, class_hist, depth, img_names = \
-        reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
+    if is_training:
+      global known_shape
+      known_shape = False
+
+    x, labels, num_labels, class_hist, img_names = \
+        reader.inputs(filenames, size, is_training=is_training,
+                      num_epochs=FLAGS.max_epochs)
     if is_training and apply_jitter:
-      x, labels, depth = jitter(x, labels, depth)
-    x, depth = normalize_input(x, depth)
+      x, labels = jitter(x, labels)
+    x = normalize_input(x)
 
     #logits = _build(x, depth, is_training)
     #total_loss = _loss(logits, labels, weights, is_training)
-    all_logits = _build(x, depth, is_training)
+    all_logits = _build(x, is_training=is_training)
     #total_loss = _multiloss(logits, mid_logits, labels, weights, is_training)
     total_loss = _multiloss(all_logits, labels, num_labels, class_hist, is_training)
 
@@ -1013,7 +1041,9 @@ def minimize(loss, global_step, num_batches):
   #power = 0.9
   # adam
   power = 1.0
-  decay_steps = num_batches * FLAGS.max_epochs
+  #decay_steps = num_batches * FLAGS.max_epochs
+  #decay_steps = 11130
+  decay_steps = FLAGS.num_iters
   lr_fine = tf.train.polynomial_decay(base_lr / fine_lr_div, global_step, decay_steps,
                                       end_learning_rate=0, power=power)
   lr = tf.train.polynomial_decay(base_lr, global_step, decay_steps,
@@ -1060,8 +1090,8 @@ def train_step(sess, run_ops):
   return vals
 
 
-def num_batches(dataset):
-  return dataset.num_examples() // FLAGS.batch_size
+def num_batches(filenames):
+  return len(filenames) // FLAGS.batch_size
   #return 1
 
 
