@@ -5,6 +5,17 @@ import skimage as ski
 import skimage.transform
 
 
+def get_class_hist(gt_img, num_classes):
+  hist = np.zeros(num_classes, dtype=np.int32)
+  #hist = np.ones(num_classes, dtype=np.int32)
+  #num_labels = (gt_img >= 0).sum()
+  for i in range(num_classes):
+    mask = gt_img == i
+    hist[i] += mask.sum()
+  num_labels = (gt_img < num_classes).sum()
+  return hist, num_labels
+
+
 def convert_colors_to_indices(rgb_img, color_map, max_wgt):
   height = rgb_img.shape[0]
   width = rgb_img.shape[1]

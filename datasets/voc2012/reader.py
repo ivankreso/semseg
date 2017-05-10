@@ -16,19 +16,22 @@ def _read_and_decode(filename_queue):
           'img_name':       tf.FixedLenFeature([], tf.string),
           'img':            tf.FixedLenFeature([], tf.string),
           'labels':         tf.FixedLenFeature([], tf.string),
-          'label_weights':  tf.FixedLenFeature([], tf.string),
+          #'label_weights':  tf.FixedLenFeature([], tf.string),
+          'class_hist':  tf.FixedLenFeature([], tf.string),
       })
 
   image = tf.to_float(tf.decode_raw(features['img'], tf.uint8, name='decode_image'))
   labels = tf.to_int32(tf.decode_raw(features['labels'], tf.int8, name='decode_labels'))
-  weights = tf.decode_raw(features['label_weights'], tf.float32, name='decode_weights')
+  #weights = tf.decode_raw(features['label_weights'], tf.float32, name='decode_weights')
+  class_hist = tf.decode_raw(features['class_hist'], tf.int32, name='decode_class_hist')
   img_name = features['img_name']
   num_labels = tf.to_float(features['num_labels'])
   image = tf.reshape(image, shape=[FLAGS.img_height, FLAGS.img_width, FLAGS.img_channels])
   labels = tf.reshape(labels, shape=[FLAGS.img_height, FLAGS.img_width, 1])
-  weights = tf.reshape(weights, shape=[FLAGS.img_height, FLAGS.img_width, 1])
+  #weights = tf.reshape(weights, shape=[FLAGS.img_height, FLAGS.img_width, 1])
+  class_hist = tf.reshape(class_hist, shape=[FLAGS.num_classes])
 
-  return image, labels, weights, num_labels, img_name
+  return image, labels, num_labels, class_hist, img_name
 
 
 def num_examples(dataset):
@@ -58,12 +61,12 @@ def inputs(dataset, is_training=False, num_epochs=None):
         num_epochs=num_epochs, shuffle=shuffle, seed=FLAGS.seed,
         capacity=dataset.num_examples())
 
-    image, labels, weights, num_labels, img_name = _read_and_decode(filename_queue)
+    image, labels, num_labels, class_hist, img_name = _read_and_decode(filename_queue)
 
     # Shuffle the examples and collect them into batch_size batches.
     # Run this in two threads to avoid being a bottleneck.
-    image, labels, weights, num_labels, img_name = tf.train.batch(
-        [image, labels, weights, num_labels, img_name], batch_size=batch_size,
+    image, labels, num_labels, class_hist, img_name = tf.train.batch(
+        [image, labels, num_labels, class_hist, img_name], batch_size=batch_size,
         num_threads=2, capacity=64)
 
-    return image, labels, weights, num_labels, img_name
+    return image, labels, num_labels, class_hist, img_name

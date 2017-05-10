@@ -7,7 +7,8 @@ SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/voc2012/',
                         train_helper.get_time_string())
 
 #DATASET_DIR = '/home/kivan/datasets/VOC2012/tensorflow/'
-DATASET_DIR = '/home/kivan/datasets/voc2012_aug/tensorflow/'
+#DATASET_DIR = '/home/kivan/datasets/voc2012_aug/tensorflow/'
+DATASET_DIR = '/home/kivan/datasets/voc2012_aug/tensorflow_new/'
 IMG_HEIGHT, IMG_WIDTH = 500, 500
 
 # SGD
@@ -24,8 +25,8 @@ tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
 tf.app.flags.DEFINE_integer('batch_size', 5, '')
 tf.app.flags.DEFINE_integer('batch_size_valid', 3, '')
 tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
-#tf.app.flags.DEFINE_integer('max_epochs', 30, 'Number of epochs to run.')
-tf.app.flags.DEFINE_integer('max_epochs', 20, 'Number of epochs to run.')
+# 20 to small
+tf.app.flags.DEFINE_integer('max_epochs', 30, 'Number of epochs to run.')
 #tf.app.flags.DEFINE_integer('max_epochs', 40, 'Number of epochs to run.')
 
 tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.5,

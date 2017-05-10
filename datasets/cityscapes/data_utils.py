@@ -14,8 +14,8 @@ def convert_ids(img, has_hood=True):
   return img_train, car_mask
 
 def get_class_hist(gt_img, num_classes):
-  #hist = np.zeros(num_classes+1, dtype=np.int32)
-  hist = np.ones(num_classes, dtype=np.int32)
+  hist = np.zeros(num_classes, dtype=np.int32)
+  #hist = np.ones(num_classes, dtype=np.int32)
   #num_labels = (gt_img >= 0).sum()
   for i in range(num_classes):
     mask = gt_img == i

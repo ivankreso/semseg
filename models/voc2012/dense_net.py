@@ -586,7 +586,8 @@ def create_init_op(params):
   return init_op, init_feed
 
 
-def jitter(image, labels, weights):
+#def jitter(image, labels, weights):
+def jitter(image, labels):
   with tf.name_scope('jitter'), tf.device('/cpu:0'):
     print('\nJittering enabled')
     global random_flip_tf, resize_width, resize_height
@@ -599,7 +600,7 @@ def jitter(image, labels, weights):
     #labels_split = tf.unstack(labels, axis=0)
     #weights_split = tf.unstack(weights, axis=0)
     out_img = []
-    out_weights = []
+    #out_weights = []
     out_labels = []
     for i in range(FLAGS.batch_size):
       out_img.append(tf.cond(random_flip_tf[i],
@@ -608,25 +609,26 @@ def jitter(image, labels, weights):
       out_labels.append(tf.cond(random_flip_tf[i],
         lambda: tf.image.flip_left_right(labels[i]),
         lambda: labels[i]))
-      out_weights.append(tf.cond(random_flip_tf[i],
-        lambda: tf.image.flip_left_right(weights[i]),
-        lambda: weights[i]))
+      #out_weights.append(tf.cond(random_flip_tf[i],
+      #  lambda: tf.image.flip_left_right(weights[i]),
+      #  lambda: weights[i]))
     image = tf.stack(out_img, axis=0)
     labels = tf.stack(out_labels, axis=0)
-    weights = tf.stack(out_weights, axis=0)
+    #weights = tf.stack(out_weights, axis=0)
 
     if jitter_scale:
       global known_shape
       known_shape = False
-      image = tf.image.resize_bicubic(image, [resize_height, resize_width])
-      #image = tf.image.resize_bilinear(image, [resize_height, resize_width])
+      #image = tf.image.resize_bicubic(image, [resize_height, resize_width])
+      image = tf.image.resize_bilinear(image, [resize_height, resize_width])
       image = tf.round(image)
       image = tf.minimum(255.0, image)
       image = tf.maximum(0.0, image)
       labels = tf.image.resize_nearest_neighbor(labels, [resize_height, resize_width])
       # TODO is this safe for zero wgts?
-      weights = tf.image.resize_nearest_neighbor(weights, [resize_height, resize_width])
-    return image, labels, weights
+      #weights = tf.image.resize_nearest_neighbor(weights, [resize_height, resize_width])
+    #return image, labels, weights
+    return image, labels
 
 
 def _get_train_feed():
@@ -662,17 +664,17 @@ def build(mode):
     dataset = valid_dataset
 
   with tf.variable_scope('', reuse=reuse):
-    x, labels, weights, num_labels, img_names = \
+    x, labels, num_labels, class_hist, img_names = \
       reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
     if is_training and apply_jitter:
-      x, labels, weights = jitter(x, labels, weights)
+      x, labels = jitter(x, labels)
     image = x
     x = normalize_input(x)
 
     #logits = _build(x, depth, is_training)
     #total_loss = _loss(logits, labels, weights, is_training)
     logits, mid_logits = _build(x, is_training)
-    total_loss = _multiloss(logits, mid_logits, labels, weights, num_labels, is_training)
+    total_loss = _multiloss(logits, mid_logits, labels, class_hist, num_labels, is_training)
 
     if is_training and imagenet_init:
       init_path = init_dir + 'dense_net_' + str(model_depth) + '.pickle'
@@ -698,15 +700,19 @@ def inference(image, constant_shape=True):
   return logits, mid_logits
 
 
-def _multiloss(logits, mid_logits, labels, weights, num_labels, is_training=True):
+def _multiloss(logits, mid_logits, labels, class_hist, num_labels, is_training=True):
   #loss1 = losses.cross_entropy_loss(logits, labels, weights, num_labels)
   #loss2 = losses.cross_entropy_loss(mid_logits, labels, weights, num_labels)
-  max_weight = 10
-  #max_weight = 1
-  loss1 = losses.weighted_cross_entropy_loss_dense(logits, labels, weights, num_labels,
-      max_weight=max_weight)
-  loss2 = losses.weighted_cross_entropy_loss_dense(mid_logits, labels, weights, num_labels,
-      max_weight=max_weight)
+  #max_weight = 10
+  max_weight = 1
+  loss1 = losses.weighted_cross_entropy_loss(logits, labels, num_labels, class_hist,
+                                             max_weight=max_weight)
+  loss2 = losses.weighted_cross_entropy_loss(mid_logits, labels, num_labels, class_hist,
+                                             max_weight=max_weight)
+  #loss1 = losses.weighted_cross_entropy_loss_dense(logits, labels, weights, num_labels,
+  #    max_weight=max_weight)
+  #loss2 = losses.weighted_cross_entropy_loss_dense(mid_logits, labels, weights, num_labels,
+  #    max_weight=max_weight)
   #wgt = 0.4
   #xent_loss = loss1 + wgt * loss2
   wgt = 0.3 # best

@@ -65,8 +65,9 @@ def weighted_cross_entropy_loss(logits, labels, num_labels, class_hist, max_weig
     class_hist = tf.to_float(tf.reduce_sum(class_hist, axis=0))
 
     #class_hist = tf.Print(class_hist, [class_hist], 'hist = ', summarize=30)
-    class_weights = num_labels / class_hist
+    class_weights = num_labels / (class_hist + 1)
     #class_weights = tf.Print(class_weights, [class_weights], 'wgt hist = ', summarize=30)
+    # we need to append 0 here for ignore pixels
     class_weights = tf.concat([class_weights, [0]], axis=0)
     #class_weights = tf.Print(class_weights, [class_weights], 'wgt hist = ', summarize=30)
     class_weights = tf.minimum(tf.to_float(max_weight), class_weights)

@@ -32,7 +32,7 @@ def _read_and_decode(filename_queue):
   labels = tf.to_int32(tf.decode_raw(features['labels'], tf.int8, name='decode_labels'))
   depth = tf.to_float(tf.decode_raw(features['depth'], tf.uint8, name='decode_depth'))
   image = tf.to_float(tf.decode_raw(features['image'], tf.uint8, name='decode_image'))
-  class_hist = tf.decode_raw(features['class_hist'], tf.int32, name='decode_weights')
+  class_hist = tf.decode_raw(features['class_hist'], tf.int32, name='decode_class_hist')
 
   image = tf.reshape(image, shape=[FLAGS.img_height, FLAGS.img_width, FLAGS.img_depth])
   depth = tf.reshape(depth, shape=[FLAGS.img_height, FLAGS.img_width, 1])

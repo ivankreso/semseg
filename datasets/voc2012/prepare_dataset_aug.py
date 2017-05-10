@@ -15,6 +15,8 @@ from tqdm import trange
 
 import PIL.Image as pimg
 
+from datasets.dataset_helper import get_class_hist
+
 #ski.io.use_plugin('pil', 'imread')
 
 
@@ -28,7 +30,7 @@ FLAGS = tf.app.flags.FLAGS
 flags = tf.app.flags
 flags.DEFINE_string('data_dir', '/home/kivan/datasets/VOC2012', '')
 #flags.DEFINE_string('save_dir', '/home/kivan/datasets/VOC2012/tensorflow', '')
-flags.DEFINE_string('save_dir', '/home/kivan/datasets/voc2012_aug/tensorflow', '')
+flags.DEFINE_string('save_dir', '/home/kivan/datasets/voc2012_aug/tensorflow_new', '')
 
 FLAGS = flags.FLAGS
 
@@ -46,7 +48,8 @@ def _bytes_feature(value):
   return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
-def create_record(img, labels, weights, num_labels, img_name, save_dir):
+#def create_record(img, labels, weights, num_labels, img_name, save_dir):
+def create_record(img, labels, class_hist, num_labels, img_name, save_dir):
   height = img.shape[0]
   width = img.shape[1]
   channels = img.shape[2]
@@ -55,7 +58,8 @@ def create_record(img, labels, weights, num_labels, img_name, save_dir):
   writer = tf.python_io.TFRecordWriter(filename)
   img_raw = img.tostring()
   labels_raw = labels.tostring()
-  weights_raw = weights.tostring()
+  #weights_raw = weights.tostring()
+  hist_raw = class_hist.tostring()
   example = tf.train.Example(features=tf.train.Features(feature={
       'height': _int64_feature(height),
       'width': _int64_feature(width),
@@ -64,7 +68,8 @@ def create_record(img, labels, weights, num_labels, img_name, save_dir):
       'img_name': _bytes_feature(img_name.encode()),
       'img': _bytes_feature(img_raw),
       'labels': _bytes_feature(labels_raw),
-      'label_weights': _bytes_feature(weights_raw)
+      'class_hist': _bytes_feature(hist_raw)
+      #'label_weights': _bytes_feature(weights_raw)
       }))
   writer.write(example.SerializeToString())
   writer.close()
@@ -164,8 +169,14 @@ def prepare_dataset():
     #label_mask = labels >= 0
     #num_labels = np.sum(label_mask)
     #weights = label_mask.astype(np.float32)
-    weights, num_labels = get_label_weights(labels)
-    create_record(img, labels, weights, num_labels, img_name, save_dir)
+
+    #weights, num_labels = get_label_weights(labels)
+    #create_record(img, labels, weights, num_labels, img_name, save_dir)
+    
+    labels[labels == -1] = NUM_CLASSES
+    class_hist, num_labels = get_class_hist(labels, NUM_CLASSES)
+    #print(class_hist)
+    create_record(img, labels, class_hist, num_labels, img_name, save_dir)
   #print(class_hist/ class_hist.sum())
 
 
