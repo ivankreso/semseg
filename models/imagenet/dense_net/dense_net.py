@@ -16,21 +16,36 @@ from tensorflow.contrib.framework import arg_scope
 FLAGS = tf.app.flags.FLAGS
 
 # RGB
-DATA_MEAN = [123.68, 116.779, 103.939]
-DATA_STD = [70.59564226, 68.52497082, 71.41913876]
+data_mean = [123.68, 116.779, 103.939]
+data_std = [70.59564226, 68.52497082, 71.41913876]
 #MEAN_BGR = [103.939, 116.779, 123.68]
 #DATA_STD = [71.41913876, 68.52497082, 70.59564226]
 
 model_depth = 121
+block_sizes = [6,12,24,16]
+# top1error = 25.41 - top5error = 7.87 (236.8 examples/sec; 0.422 sec/batch)
+
+#model_depth = 169
+#block_sizes = [6,12,32,32]
+# top1error = 24.13 - top5error = 7.03 (198.5 examples/sec; 0.504 sec/batch)
+
+
 init_dir = '/home/kivan/datasets/pretrained/dense_net/'
 
 weight_decay = 1e-4
 #init_func = layers.variance_scaling_initializer(mode='FAN_OUT')
 init_func = layers.variance_scaling_initializer()
 
-block_sizes = [6,12,24,16]
 k = 32
 compression = 0.5
+
+#data_format = 'NCHW'
+#maps_dim = 1
+#height_dim = 2
+
+data_format = 'NHWC'
+maps_dim = 3
+height_dim = 1
 
 bn_params = {
   # Decay for the moving averages.
@@ -43,30 +58,47 @@ bn_params = {
   'epsilon': 1e-5,
   # None to force the updates
   'updates_collections': None,
+  'fused': True,
+  'data_format': data_format,
   'is_training': True
 }
 
 
 def normalize_input(img):
-  return (img - DATA_MEAN) / DATA_STD
+  if data_format == 'NCHW':
+    img = tf.transpose(img, perm=[0,3,1,2])
+    mean = tf.constant(data_mean, dtype=tf.float32, shape=[1,3,1,1])
+    std = tf.constant(data_std, dtype=tf.float32, shape=[1,3,1,1])
+  else:
+    mean = data_mean
+    std = data_mean
+  return (img - mean) / std
 
-def BNReluConv(net, num_filters, name, is_training, k=3):
-  with tf.variable_scope(name):
-    net = tf.contrib.layers.batch_norm(net, **bn_params)
-    net = tf.nn.relu(net)
-    net = layers.conv2d(net, num_filters, kernel_size=k)
-  return net
 
-def layer(net, num_filters, name, is_training, k=3):
-  with tf.variable_scope(name):
-    with tf.variable_scope('bottleneck'):
-      net = tf.contrib.layers.batch_norm(net, **bn_params)
-      net = tf.nn.relu(net)
-      net = layers.conv2d(net, 4*num_filters, kernel_size=1)
-    with tf.variable_scope('conv'):
+def BNReluConv(net, num_filters, name, k=3):
+  with arg_scope([layers.conv2d],
+      data_format=data_format, stride=1, padding='SAME', activation_fn=None,
+      normalizer_fn=None, normalizer_params=None,
+      weights_initializer=init_func, biases_initializer=None,
+      weights_regularizer=layers.l2_regularizer(weight_decay)):
+    with tf.variable_scope(name):
       net = tf.contrib.layers.batch_norm(net, **bn_params)
       net = tf.nn.relu(net)
       net = layers.conv2d(net, num_filters, kernel_size=k)
+    return net
+
+def layer(net, num_filters, name, is_training, k=3):
+  with tf.variable_scope(name):
+    net = BNReluConv(net, 4*num_filters, 'bottleneck', k=1)
+    net = BNReluConv(net, num_filters, 'conv', k=3)
+    #with tf.variable_scope('bottleneck'):
+    #  net = tf.contrib.layers.batch_norm(net, **bn_params)
+    #  net = tf.nn.relu(net)
+    #  net = layers.conv2d(net, 4*num_filters, kernel_size=1)
+    #with tf.variable_scope('conv'):
+    #  net = tf.contrib.layers.batch_norm(net, **bn_params)
+    #  net = tf.nn.relu(net)
+    #  net = layers.conv2d(net, num_filters, kernel_size=k)
     #if is_training: 
       #net = tf.nn.dropout(net, keep_prob=0.8)
   return net
@@ -76,42 +108,48 @@ def dense_block(net, size, k, name, is_training):
     for i in range(size):
       x = net
       net = layer(net, k, 'layer'+str(i), is_training)
-      net = tf.concat([x, net], 3)
-  print(net)
+      net = tf.concat([x, net], maps_dim)
   return net
 
 def transition(net, compression, name):
   with tf.variable_scope(name):
     net = tf.contrib.layers.batch_norm(net, **bn_params)
     net = tf.nn.relu(net)
-    num_filters = net.get_shape().as_list()[3]
+    num_filters = net.get_shape().as_list()[maps_dim]
     num_filters = int(round(num_filters*compression))
-    net = layers.convolution2d(net, num_filters, kernel_size=1)
-    net = layers.avg_pool2d(net, 2, stride=2, padding='SAME')
-  print(net)
+    net = layers.conv2d(net, num_filters, kernel_size=1, data_format=data_format)
+    net = layers.avg_pool2d(net, 2, stride=2, padding='SAME', data_format=data_format)
   return net
 
 def build(image, is_training=False):
   bn_params['is_training'] = is_training
   image = normalize_input(image)
+  print(image)
   
-  with arg_scope([layers.convolution2d, layers.convolution2d_transpose],
-      stride=1, padding='SAME', activation_fn=None,
+  with arg_scope([layers.conv2d],
+      data_format=data_format, stride=1, padding='SAME', activation_fn=None,
       normalizer_fn=None, normalizer_params=None,
       weights_initializer=init_func, biases_initializer=None,
       weights_regularizer=layers.l2_regularizer(weight_decay)):
     with tf.variable_scope('conv0'):
-      net = layers.convolution2d(image, 2*k, 7, stride=2, padding='VALID')
+      net = layers.conv2d(image, 2*k, 7, stride=2, padding='VALID')
       net = tf.contrib.layers.batch_norm(net, **bn_params)
       net = tf.nn.relu(net)
 
-    net = layers.max_pool2d(net, 3, stride=2, padding='SAME', scope='pool0')
+    net = layers.max_pool2d(net, 3, stride=2, padding='SAME',
+                            data_format=data_format, scope='pool0')
     net = dense_block(net, block_sizes[0], k, 'block0', is_training)
+    print(net)
     net = transition(net, compression, 'block0/transition')
+    print(net)
     net = dense_block(net, block_sizes[1], k, 'block1', is_training)
+    print(net)
     net = transition(net, compression, 'block1/transition')
+    print(net)
     net = dense_block(net, block_sizes[2], k, 'block2', is_training)
+    print(net)
     net = transition(net, compression, 'block2/transition')
+    print(net)
     net = dense_block(net, block_sizes[3], k, 'block3', is_training)
     feats=net
     print(net)
@@ -119,9 +157,10 @@ def build(image, is_training=False):
     with tf.variable_scope('head'):
       net = tf.contrib.layers.batch_norm(net, **bn_params)
       net = tf.nn.relu(net)
-      net = tf.reduce_mean(net, axis=[1,2])
-      logits = layers.fully_connected(net,
-        1000, activation_fn=None, scope='fc1000')
+      net = tf.reduce_mean(net, axis=[height_dim,height_dim+1])
+      print(net)
+      logits = layers.fully_connected(net, 1000, activation_fn=None,
+                                      scope='fc1000')
       prob = tf.nn.softmax(logits)
   return logits, prob, feats
 

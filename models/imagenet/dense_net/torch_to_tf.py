@@ -21,7 +21,8 @@ def read_tensor(path):
   return tensor
 
 
-model = 121
+#model = 121
+model = 169
 root_path = '/home/kivan/datasets/pretrained/dense_net/'
 dir_path = root_path + 'torch/' + str(model)
 filelist = [f for f in listdir(dir_path) if isfile(join(dir_path, f))]

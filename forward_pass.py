@@ -40,9 +40,9 @@ SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/submit_75.5'
 #SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/main/'
 
 #NET_DIR = '/home/kivan/datasets/results/iccv/03_7_3_17-57-58/'
-#NET_DIR = '/home/kivan/datasets/results/iccv/cityscapes/full_best_16_3_16-25-14/'
+NET_DIR = '/home/kivan/datasets/results/iccv/cityscapes/full_best_16_3_16-25-14/'
 #NET_DIR = '/home/kivan/datasets/results/tmp/cityscapes/22_3_10-50-51/'
-NET_DIR = '/home/kivan/datasets/results/tmp/cityscapes/28_3_07-01-21/'
+#NET_DIR = '/home/kivan/datasets/results/tmp/cityscapes/28_3_07-01-21/'
 MODEL_PATH = NET_DIR + 'model.py'
 
 #tf.app.flags.DEFINE_integer('img_width', 2048, '')

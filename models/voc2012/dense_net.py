@@ -24,16 +24,22 @@ FLAGS = tf.app.flags.FLAGS
 data_mean = [116.49585869, 112.43425923, 103.19996733]
 data_std = [60.37073962, 59.39268441, 60.74823033]
 
-root_dir = '/home/kivan/datasets/voc2012_aug'
+#root_dir = '/home/kivan/datasets/voc2012_aug'
+#root_dir = '/home/kivan/datasets/VOC2012/ImageSets/Segmentation'
+root_dir = FLAGS.dataset_dir
 if FLAGS.no_valid:
-  train_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, 'trainval.txt'), 'trainval')
+  train_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, '../trainval.txt'), 'trainval')
 else:
-  train_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, 'train.txt'), 'train')
-  valid_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, 'val.txt'), 'val')
+  train_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, '../train.txt'), 'train')
+  valid_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, '../val.txt'), 'val')
 
 print('Num training examples = ', train_dataset.num_examples())
 
-model_depth = 121
+#model_depth = 121
+#block_sizes = [6,12,24,16]
+model_depth = 169
+block_sizes = [6,12,32,32]
+
 imagenet_init = True
 #imagenet_init = False
 init_dir = '/home/kivan/datasets/pretrained/dense_net/'
@@ -48,10 +54,11 @@ known_shape = True
 train_step_iter = 0
 
 weight_decay = 1e-4
+#weight_decay = 4e-5
+#weight_decay = 2e-4
 #init_func = layers.variance_scaling_initializer(mode='FAN_OUT')
 init_func = layers.variance_scaling_initializer()
 
-block_sizes = [6,12,24,16]
 #block_sizes = [6,12,24,16,8]
 context_size = 512
 #imagenet_init = False
@@ -94,7 +101,6 @@ bn_params = {
   'epsilon': 1e-5,
   # None to force the updates
   'updates_collections': None,
-  # TODO
   'fused': fused_batch_norm,
   'data_format': data_format,
   'is_training': True
@@ -377,7 +383,6 @@ def dense_block_upsample_worse(net, skip_net, size, growth, name):
     num_filters = int(round(num_filters*compression))
     #num_filters = int(round(num_filters*compression/2))
     #num_filters = int(round(num_filters*0.3))
-    # TODO try 3 vs 1
     net = BNReluConv(net, num_filters, 'bottleneck', k=1)
     #net = BNReluConv(net, num_filters, 'bottleneck', k=3)
     #net = tf.concat([net, depth], maps_dim)
@@ -392,8 +397,10 @@ def dense_block_upsample_worse(net, skip_net, size, growth, name):
 
 # try stronger upsampling
 #up_sizes = [64,128,256,512] # good
-up_sizes = [128,256,256,512] # good
-#up_sizes = [256,256,512,512] # good
+#up_sizes = [128,256,256,512] # good
+#up_sizes = [128,256,256,256]
+#up_sizes = [128,128,256,256]
+up_sizes = [256,256,512,512] # good
 #up_sizes = [128,256,384,512] # 0.5% worse then up
 #up_sizes = [32,64,128,256]
 def dense_block_upsample(net, skip_net, size, growth, name):
@@ -401,12 +408,13 @@ def dense_block_upsample(net, skip_net, size, growth, name):
     # TODO
     num_filters = net.get_shape().as_list()[maps_dim]
     skip_net = BNReluConv(skip_net, num_filters, 'bottleneck', k=1)
-    #net = tf.concat([net, skip_net], maps_dim)
-    net = net + skip_net
+    net = tf.concat([net, skip_net], maps_dim)
+    #net = net + skip_net
     #net = BNReluConv(net, num_filters, 'bottleneck', k=3)
     print('after concat = ', net)
     net = BNReluConv(net, size, 'layer')
   return net
+
 
 # tiramisu
 #growth_up = 64
@@ -494,24 +502,24 @@ def _build(image, is_training=False):
     #skip_layers.append([skip, up_sizes[1], growth_up, 'block1_refine'])
 
     # works the same with split, not 100%
-    #context_pool_num = 3
+    context_pool_num = 3
     #net, skip = dense_block(net, block_sizes[2], growth, 'block2', is_training, split=True)
     #skip_layers.append([skip, up_sizes[2], growth_up, 'block2_mid_refine'])
-    context_pool_num = 4
+    #context_pool_num = 4
     net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
     skip_layers.append([net, up_sizes[3], growth_up, 'block2_refine'])
     net, _ = transition(net, compression, 'block2/transition')
-    #skip_layers.append([skip, up_sizes[3], growth_up, 'block2_refine'])
 
-    #skip_layers.append([skip, 4, k_up, 'block2_refine', depth])
-    net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
-    #net, skip = dense_block(net, block_sizes[3], growth, 'block3', is_training, split=True)
-    #skip_layers.append([skip, up_sizes[-1], growth_up, 'block3_refine'])
+    #net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
+    net, skip = dense_block(net, block_sizes[3], growth, 'block3', is_training, split=True)
+    #context_pool_num = 3
+    skip_layers.append([skip, up_sizes[-1], growth_up, 'block3_refine'])
 
     with tf.variable_scope('head'):
       net = BNReluConv(net, 512, 'bottleneck', k=1)
       net = _pyramid_pooling(net, size=context_pool_num)
-      #net = pyramid_pooling2(net, size=context_pool_num)
+      #net = BNReluConv(net, context_size, 'context_conv', k=3)
+
       #layer {
       #  name: "conv5_4/dropout"
       #  type: "Dropout"
@@ -527,36 +535,59 @@ def _build(image, is_training=False):
       #print('7x7')
       #net = BNReluConv(net, context_size, 'context_conv', k=7)
       #net = BNReluConv(net, context_size, 'context_conv', k=7, rate=2)
+      #net = BNReluConv(net, context_size, 'context_conv', k=3, rate=2)
+      #in_shape = net.get_shape().as_list()
+      #in_shape[maps_dim] = context_size
+      #net.set_shape(in_shape)
+      #net = BNReluConv(net, context_size, 'context_conv', k=5)
       #final_h = net.get_shape().as_list()[height_dim]
       print('Before upsampling: ', net)
-      mid_logits = net
 
+      all_logits = [net]
       for skip_layer in reversed(skip_layers):
         net = refine(net, skip_layer)
+        all_logits.append(net)
         print('after upsampling = ', net)
 
   with tf.variable_scope('head'):
-    with tf.variable_scope('logits'):
+    for i, logits in enumerate(all_logits):
+      with tf.variable_scope('logits_'+str(i)):
+      # FIX
       #net = tf.nn.relu(layers.batch_norm(net, **bn_params))
-      net = tf.nn.relu(net)
-      logits = layers.conv2d(net, FLAGS.num_classes, 1, activation_fn=None,
-                             data_format=data_format)
+      #logits = layers.conv2d(net, FLAGS.num_classes, 1, activation_fn=None,
+      #                       data_format=data_format)
+        logits = layers.conv2d(tf.nn.relu(logits), FLAGS.num_classes, 1,
+                               activation_fn=None, data_format=data_format)
 
-    with tf.variable_scope('mid_logits'):
-      #mid_logits = tf.nn.relu(layers.batch_norm(mid_logits, **bn_params))
-      mid_logits = tf.nn.relu(mid_logits)
-      mid_logits = layers.conv2d(mid_logits, FLAGS.num_classes, 1, activation_fn=None,
-                                 data_format=data_format)
+        if data_format == 'NCHW':
+          logits = tf.transpose(logits, perm=[0,2,3,1])
+        input_shape = tf.shape(image)[height_dim:height_dim+2]
+        logits = tf.image.resize_bilinear(logits, input_shape, name='resize_logits')
+        all_logits[i] = logits
+    logits = all_logits.pop()
+    return logits, all_logits
 
-    if data_format == 'NCHW':
-      logits = tf.transpose(logits, perm=[0,2,3,1])
-      mid_logits = tf.transpose(mid_logits, perm=[0,2,3,1])
-    input_shape = tf.shape(image)[height_dim:height_dim+2]
-    logits = tf.image.resize_bilinear(logits, input_shape, name='resize_logits')
-    mid_logits = tf.image.resize_bilinear(mid_logits, input_shape, name='resize_mid_logits')
+    #with tf.variable_scope('logits'):
+    #  #net = tf.nn.relu(layers.batch_norm(net, **bn_params))
+    #  net = tf.nn.relu(net)
+    #  logits = layers.conv2d(net, FLAGS.num_classes, 1, activation_fn=None,
+    #                         data_format=data_format)
+
+    #with tf.variable_scope('mid_logits'):
+    #  #mid_logits = tf.nn.relu(layers.batch_norm(mid_logits, **bn_params))
+    #  mid_logits = tf.nn.relu(mid_logits)
+    #  mid_logits = layers.conv2d(mid_logits, FLAGS.num_classes, 1, activation_fn=None,
+    #                             data_format=data_format)
+
     #if data_format == 'NCHW':
-    #  top_layer = tf.transpose(top_layer, perm=[0,3,1,2])
-    return logits, mid_logits
+    #  logits = tf.transpose(logits, perm=[0,2,3,1])
+    #  mid_logits = tf.transpose(mid_logits, perm=[0,2,3,1])
+    #input_shape = tf.shape(image)[height_dim:height_dim+2]
+    #logits = tf.image.resize_bilinear(logits, input_shape, name='resize_logits')
+    #mid_logits = tf.image.resize_bilinear(mid_logits, input_shape, name='resize_mid_logits')
+    ##if data_format == 'NCHW':
+    ##  top_layer = tf.transpose(top_layer, perm=[0,3,1,2])
+    #return logits, mid_logits
 
 
 def create_init_op(params):
@@ -619,8 +650,8 @@ def jitter(image, labels):
     if jitter_scale:
       global known_shape
       known_shape = False
-      #image = tf.image.resize_bicubic(image, [resize_height, resize_width])
-      image = tf.image.resize_bilinear(image, [resize_height, resize_width])
+      image = tf.image.resize_bicubic(image, [resize_height, resize_width])
+      #image = tf.image.resize_bilinear(image, [resize_height, resize_width])
       image = tf.round(image)
       image = tf.minimum(255.0, image)
       image = tf.maximum(0.0, image)
@@ -639,9 +670,11 @@ def _get_train_feed():
   #resize_scale = np.random.uniform(0.4, 1.5)
   #resize_scale = np.random.uniform(0.5, 1.2)
   #min_resize = 0.7
-  #min_resize = 1
+  #max_resize = 1.3
   min_resize = 0.8
   max_resize = 1.2
+  #min_resize = 0.9
+  #max_resize = 1.1
   #max_resize = 1
   if train_step_iter == 0:
     resize_scale = max_resize
@@ -673,8 +706,9 @@ def build(mode):
 
     #logits = _build(x, depth, is_training)
     #total_loss = _loss(logits, labels, weights, is_training)
-    logits, mid_logits = _build(x, is_training)
-    total_loss = _multiloss(logits, mid_logits, labels, class_hist, num_labels, is_training)
+    #logits, mid_logits = _build(x, is_training)
+    logits, aux_logits = _build(x, is_training)
+    total_loss = _multiloss(logits, aux_logits, labels, class_hist, num_labels, is_training)
 
     if is_training and imagenet_init:
       init_path = init_dir + 'dense_net_' + str(model_depth) + '.pickle'
@@ -700,14 +734,36 @@ def inference(image, constant_shape=True):
   return logits, mid_logits
 
 
-def _multiloss(logits, mid_logits, labels, class_hist, num_labels, is_training=True):
+def _multiloss(logits, aux_logits, labels, num_labels, class_hist, is_training):
+  max_weight = FLAGS.max_weight
+  xent_loss = 0
+  main_wgt = 0.6
+  aux_wgt = (1 - main_wgt) / len(aux_logits)
+  xent_loss = main_wgt * losses.weighted_cross_entropy_loss(
+      logits, labels, class_hist, max_weight=max_weight)
+  for i, l in enumerate(aux_logits):
+    print('loss' + str(i), ' --> ' , l)
+    xent_loss += aux_wgt * losses.weighted_cross_entropy_loss(
+      l, labels, class_hist, max_weight=max_weight)
+
+  all_losses = [xent_loss]
+  # get losses + regularization
+  total_loss = losses.total_loss_sum(all_losses)
+  if is_training:
+    loss_averages_op = losses.add_loss_summaries(total_loss)
+    with tf.control_dependencies([loss_averages_op]):
+      total_loss = tf.identity(total_loss)
+  return total_loss
+
+
+def _dualloss(logits, mid_logits, labels, class_hist, num_labels, is_training=True):
   #loss1 = losses.cross_entropy_loss(logits, labels, weights, num_labels)
   #loss2 = losses.cross_entropy_loss(mid_logits, labels, weights, num_labels)
   #max_weight = 10
   max_weight = 1
-  loss1 = losses.weighted_cross_entropy_loss(logits, labels, num_labels, class_hist,
+  loss1 = losses.weighted_cross_entropy_loss(logits, labels, class_hist,
                                              max_weight=max_weight)
-  loss2 = losses.weighted_cross_entropy_loss(mid_logits, labels, num_labels, class_hist,
+  loss2 = losses.weighted_cross_entropy_loss(mid_logits, labels, class_hist,
                                              max_weight=max_weight)
   #loss1 = losses.weighted_cross_entropy_loss_dense(logits, labels, weights, num_labels,
   #    max_weight=max_weight)
@@ -734,31 +790,28 @@ def _multiloss(logits, mid_logits, labels, class_hist, num_labels, is_training=T
 
 def minimize(loss, global_step, num_batches):
   # Calculate the learning rate schedule.
-  decay_steps = int(num_batches * FLAGS.num_epochs_per_decay)
+  #decay_steps = int(num_batches * FLAGS.num_epochs_per_decay)
   # Decay the learning rate exponentially based on the number of steps.
   global lr
   #base_lr = 1e-2 # for sgd
   base_lr = FLAGS.initial_learning_rate
-  stairs = True
-  #stairs = False
   #TODO
-  fine_lr_div = 5
-  #fine_lr_div = 10
+  #fine_lr_div = 5
+  fine_lr_div = 10
   #fine_lr_div = 7
   print('fine_lr = base_lr / ', fine_lr_div)
   #lr_fine = tf.train.exponential_decay(base_lr / 10, global_step, decay_steps,
   #lr_fine = tf.train.exponential_decay(base_lr / 20, global_step, decay_steps,
 
-  power = 0.9
-  #power = 1.0
   #decay_steps = int(num_batches * 30)
   decay_steps = num_batches * FLAGS.max_epochs
   lr_fine = tf.train.polynomial_decay(base_lr / fine_lr_div, global_step, decay_steps,
-                                      end_learning_rate=0, power=power)
+                                      end_learning_rate=0, power=FLAGS.decay_power)
   lr = tf.train.polynomial_decay(base_lr, global_step, decay_steps,
-                                 end_learning_rate=0, power=power)
+                                 end_learning_rate=0, power=FLAGS.decay_power)
   #lr = tf.Print(lr, [lr], message='lr = ', summarize=10)
 
+  #stairs = True
   #lr_fine = tf.train.exponential_decay(base_lr / fine_lr_div, global_step, decay_steps,
   #                                FLAGS.learning_rate_decay_factor, staircase=stairs)
   #lr = tf.train.exponential_decay(base_lr, global_step, decay_steps,
@@ -766,8 +819,12 @@ def minimize(loss, global_step, num_batches):
   tf.summary.scalar('learning_rate', lr)
   # adam works much better here!
   if imagenet_init:
-    #opts = [tf.train.AdamOptimizer(lr_fine), tf.train.AdamOptimizer(lr)]
-    opts = [tf.train.MomentumOptimizer(lr_fine, 0.9), tf.train.MomentumOptimizer(lr, 0.9)]
+    if FLAGS.optimizer == 'adam':
+      opts = [tf.train.AdamOptimizer(lr_fine), tf.train.AdamOptimizer(lr)]
+    elif FLAGS.optimizer == 'momentum':
+      opts = [tf.train.MomentumOptimizer(lr_fine, 0.9), tf.train.MomentumOptimizer(lr, 0.9)]
+    else:
+      raise ValueError('unknown optimizer')
     return train_helper.minimize_fine_tune(opts, loss, global_step, 'head')
   else:
     #opt = tf.train.AdamOptimizer(lr)

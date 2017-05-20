@@ -56,7 +56,8 @@ function dump_batch_norm(layer, prefix)
   write_tensor(beta, path)
 end
 
-depth = 121
+--depth = 121
+depth = 169
 path = '/home/kivan/datasets/pretrained/dense_net/torch/densenet-'..depth..'.t7'
 save_dir = '/home/kivan/datasets/pretrained/dense_net/torch/' .. depth .. '/'
 net = torch.load(path)
@@ -65,6 +66,8 @@ print(net)
 
 if depth == 121 then
   block_sizes = {6, 12, 24, 16}
+elseif depth == 169 then
+  block_sizes = {6, 12, 32, 32}
 end
 
 conv0 = net:get(1)

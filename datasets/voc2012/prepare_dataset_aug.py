@@ -29,8 +29,8 @@ FLAGS = tf.app.flags.FLAGS
 
 flags = tf.app.flags
 flags.DEFINE_string('data_dir', '/home/kivan/datasets/VOC2012', '')
-#flags.DEFINE_string('save_dir', '/home/kivan/datasets/VOC2012/tensorflow', '')
-flags.DEFINE_string('save_dir', '/home/kivan/datasets/voc2012_aug/tensorflow_new', '')
+#flags.DEFINE_string('save_dir', '/home/kivan/datasets/voc2012_aug/tensorflow', '')
+flags.DEFINE_string('save_dir', '/home/kivan/datasets/VOC2012/tensorflow', '')
 
 FLAGS = flags.FLAGS
 
@@ -127,7 +127,8 @@ def imread(path):
 
 def prepare_dataset():
   img_dir = join(FLAGS.data_dir, 'JPEGImages')
-  labels_dir = '/home/kivan/datasets/voc2012_aug/data'
+  #labels_dir = '/home/kivan/datasets/voc2012_aug/data'
+  labels_dir = join(FLAGS.data_dir, 'SegmentationClass')
   imglist = next(os.walk(labels_dir))[2]
   imglist = [x[:-4] for x in imglist]
   print('Num of images: ', len(imglist))
