@@ -11,18 +11,21 @@ DATASET_DIR = '/home/kivan/datasets/VOC2012/tensorflow/'
 IMG_HEIGHT, IMG_WIDTH = 500, 500
 
 # SGD
-# 2e-2 to large
 #tf.app.flags.DEFINE_string('optimizer', 'momentum', '')
-#tf.app.flags.DEFINE_float('initial_learning_rate', 1e-2, '')
+#adam = 70.11
+##tf.app.flags.DEFINE_float('initial_learning_rate', 1e-2, '') 68.2
+#tf.app.flags.DEFINE_float('initial_learning_rate', 2e-2, '')
+##tf.app.flags.DEFINE_float('initial_learning_rate', 3e-2, '') 69.13
+##tf.app.flags.DEFINE_float('initial_learning_rate', 5e-2, '') 68.52
 #tf.app.flags.DEFINE_float('decay_power', 0.9, '')
 # 7 to big
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 6, '')
 # ADAM
 tf.app.flags.DEFINE_string('optimizer', 'adam', '')
-#tf.app.flags.DEFINE_float('decay_power', 1.0, '')
-tf.app.flags.DEFINE_float('decay_power', 1.3, '')
+tf.app.flags.DEFINE_float('decay_power', 1.5, '')
 tf.app.flags.DEFINE_float('initial_learning_rate', 5e-4, '')
+
 #tf.app.flags.DEFINE_float('initial_learning_rate', 1e-3, '')
 #tf.app.flags.DEFINE_float('initial_learning_rate', 7e-4, '')
 #tf.app.flags.DEFINE_integer('num_epochs_per_decay', 5, '')
@@ -31,7 +34,7 @@ tf.app.flags.DEFINE_integer('max_weight', 1, '')
 tf.app.flags.DEFINE_integer('batch_size', 5, '')
 tf.app.flags.DEFINE_integer('batch_size_valid', 3, '')
 tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
-# 20 to small
+# 20 to small, 30 enough it seems
 #tf.app.flags.DEFINE_integer('max_epochs', 30, 'Number of epochs to run.')
 tf.app.flags.DEFINE_integer('max_epochs', 40, 'Number of epochs to run.')
 #tf.app.flags.DEFINE_integer('max_epochs', 50, 'Number of epochs to run.')
@@ -54,8 +57,8 @@ tf.app.flags.DEFINE_string('debug_dir', os.path.join(SAVE_DIR, 'debug'), '')
 tf.app.flags.DEFINE_integer('num_classes', 21, '')
 tf.app.flags.DEFINE_boolean('log_device_placement', False, 'Whether to log device placement.')
 tf.app.flags.DEFINE_boolean('draw_predictions', False, 'Whether to draw.')
-tf.app.flags.DEFINE_boolean('save_net', True, 'Whether to save.')
+#tf.app.flags.DEFINE_boolean('save_net', True, 'Whether to save.')
+tf.app.flags.DEFINE_boolean('save_net', False, 'Whether to save.')
 tf.app.flags.DEFINE_boolean('no_valid', False, 'Whether to save.')
 
 tf.app.flags.DEFINE_integer('seed', 66478, '')
-

@@ -17,13 +17,16 @@ from datasets.voc2012.dataset import Dataset
 
 np.set_printoptions(linewidth=250)
 
-#DATA_DIR = '/home/kivan/datasets/voc2012_aug/data/'
+num_classes = 21
+img_name = '2011_001620'
+img_dir = '/home/kivan/datasets/VOC2012/JPEGImages/'
+label_dir = '/home/kivan/datasets/voc2012_aug/data/'
 #split = 'val'
 
-DATA_DIR = '/home/kivan/datasets/VOC2012/test_data'
+#DATA_DIR = '/home/kivan/datasets/VOC2012/test_data'
 
 tf.app.flags.DEFINE_string('model_dir',
-    '/home/kivan/datasets/results/tmp/voc2012/25_5_22-30-16', '')
+    '/home/kivan/datasets/results/voc2012/iou77_24_5_22-39-18', '')
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -31,15 +34,14 @@ helper.import_module('config', os.path.join(FLAGS.model_dir, 'config.py'))
 
 
 def forward_pass(model, save_dir):
-  img_dir = join(DATA_DIR, 'JPEGImages')
-  file_path = join(DATA_DIR, 'ImageSets', 'Segmentation', 'test.txt')
-  fp = open(file_path)
-  file_list = [line.strip() for line in fp]
+  #file_path = join(DATA_DIR, 'ImageSets', 'Segmentation', 'test.txt')
+  #fp = open(file_path)
+  #file_list = [line.strip() for line in fp]
 
   save_dir_rgb = join(save_dir, 'rgb')
   tf.gfile.MakeDirs(save_dir_rgb)
-  save_dir_submit = join(save_dir, 'submit')
-  tf.gfile.MakeDirs(save_dir_submit)
+  save_dir_pred = join(save_dir, 'pred')
+  tf.gfile.MakeDirs(save_dir_pred)
   #sess = tf.Session(config=tf.ConfigProto(log_device_placement=FLAGS.log_device_placement))
   config = tf.ConfigProto(log_device_placement=FLAGS.log_device_placement)
   #config.gpu_options.per_process_gpu_memory_fraction = 0.5 # don't hog all vRAM
@@ -51,7 +53,11 @@ def forward_pass(model, save_dir):
 
   batch_shape = (1, None, None, 3)
   image_tf = tf.placeholder(tf.float32, shape=batch_shape)
-  logits, _ = model.inference(image_tf, constant_shape=False)
+  labels_tf = tf.placeholder(tf.int32, shape=(1, None, None, 1))
+  logits, aux_logits, loss = model.inference(image_tf, labels_tf, constant_shape=False,
+      is_training=False)
+      #is_training=True)
+  img_grads = tf.gradients(loss, image_tf)
 
   #sess.run(tf.global_variables_initializer())
   sess.run(tf.local_variables_initializer())
@@ -59,18 +65,50 @@ def forward_pass(model, save_dir):
   restorer = tf.train.Saver(tf.global_variables())
   restorer.restore(sess, latest)
 
-  img_names = []
-  for i in trange(len(file_list)):
-    img_path = join(img_dir, file_list[i] + '.jpg')
-    image = np.array(pimg.open(img_path))
-    image = image[np.newaxis,...]
-    logits_val = sess.run(logits, feed_dict={image_tf:image})
-    #pred_labels = logits_val[0].argmax(2).astype(np.int32)
-    pred_labels = logits_val[0].argmax(2).astype(np.uint8)
-    save_path = os.path.join(save_dir_rgb, file_list[i] + '.png')
+  img_path = join(img_dir, img_name + '.jpg')
+  label_path = join(label_dir, img_name + '.png')
+  image = np.array(pimg.open(img_path)).astype(np.float32)
+  image = image[np.newaxis,...]
+  labels = np.array(pimg.open(label_path)).astype(np.int8)
+  labels[labels==-1] = num_classes
+  #labels[labels==-1] = 20
+  labels = labels[np.newaxis,...,np.newaxis]
+
+  while True:
+    loss_val, logits_val, img_grads_val = sess.run([loss, logits, img_grads],
+        feed_dict={image_tf:image, labels_tf:labels})
+    print('loss = ', loss_val)
+    img_grads_val = img_grads_val[0]
+    print('grad norm = ', np.linalg.norm(img_grads_val))
+    pred_labels = logits_val[0].argmax(2).astype(np.int32)
+    save_path = os.path.join(save_dir_pred, img_name + '.png')
     eval_helper.draw_output(pred_labels, Dataset.class_info, save_path)
-    pred_img = pimg.fromarray(pred_labels)
-    pred_img.save(join(save_dir_submit, file_list[i] + '.png'))
+
+    labels_2d = labels[0,:,:,0]
+    pred_labels[pred_labels != labels_2d] = -1
+    #pred_labels[labels == num_classes] = -1
+    num_correct = (pred_labels >= 0).sum()
+    num_labels = np.sum(labels_2d != num_classes)
+    image += 1e4 * img_grads_val
+    #image += np.sign(img_grads_val)
+    save_img = np.minimum(255, np.round(image[0]))
+    save_img = np.maximum(0, save_img)
+    save_img = save_img.astype(np.uint8)
+    pil_img = pimg.fromarray(save_img)
+    pil_img.save(join(save_dir_rgb, img_name + '.png'))
+  #  pred_img = pimg.fromarray(pred_labels)
+  #  pred_img.save(join(save_dir_submit, file_list[i] + '.png'))
+
+    print('pixel accuracy = ', num_correct / num_labels * 100)
+    print('press key...')
+    input()
+
+  #  #pred_labels = logits_val[0].argmax(2).astype(np.int32)
+  #  pred_labels = logits_val[0].argmax(2).astype(np.uint8)
+  #  save_path = os.path.join(save_dir_rgb, file_list[i] + '.png')
+  #  eval_helper.draw_output(pred_labels, Dataset.class_info, save_path)
+  #  pred_img = pimg.fromarray(pred_labels)
+  #  pred_img.save(join(save_dir_submit, file_list[i] + '.png'))
 
     ##gt_labels = gt_labels.astype(np.int32, copy=False)
     #cylib.collect_confusion_matrix(net_labels.reshape(-1), gt_labels.reshape(-1), conf_mat)
@@ -106,7 +144,7 @@ def main(argv=None):  # pylint: disable=unused-argument
 
   if not tf.gfile.Exists(FLAGS.model_dir):
     raise ValueError('Net dir not found: ' + FLAGS.model_dir)
-  save_dir = os.path.join(FLAGS.model_dir, 'evaluation', 'test')
+  save_dir = os.path.join(FLAGS.model_dir, 'evaluation', 'adversarial')
   tf.gfile.MakeDirs(save_dir)
 
   forward_pass(model, save_dir)

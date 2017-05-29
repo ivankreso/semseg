@@ -50,7 +50,7 @@ def total_loss_sum(losses):
   return total_loss
 
 
-def weighted_cross_entropy_loss(logits, labels, class_hist, max_weight=1):
+def weighted_cross_entropy_loss(logits, labels, class_hist=None, max_weight=1):
   print('loss: cross-entropy')
   print('Using balanced loss with max weight = ', max_weight)
   num_pixels = -1

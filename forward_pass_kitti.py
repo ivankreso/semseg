@@ -33,9 +33,10 @@ tf.app.flags.DEFINE_integer('img_height', 375, '')
 #DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/black/full/test'
 #SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/hood/'
 #DATA_DIR = '/home/kivan/datasets/KITTI/training/image_2'
-#SAVE_DIR = '/home/kivan/datasets/KITTI/out/train'
-DATA_DIR = '/home/kivan/datasets/KITTI/testing/image_2'
-SAVE_DIR = '/home/kivan/datasets/KITTI/out/test'
+#DATA_DIR = '/home/kivan/datasets/KITTI/training/image_3'
+#SAVE_DIR = '/home/kivan/datasets/KITTI/out/train_right'
+DATA_DIR = '/home/kivan/datasets/KITTI/testing/image_3'
+SAVE_DIR = '/home/kivan/datasets/KITTI/out/test_right'
 
 #DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/black/croped/test'
 #SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/main/'

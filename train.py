@@ -76,6 +76,7 @@ def train(model):
     #variable_map = train_helper.get_variable_map()
     # take the train loss moving average
     #loss_avg_train = variable_map['total_loss/avg:0']
+    print('Training network...\nModel saving =', FLAGS.save_net)
     train_loss_val = 0
     train_data, valid_data = model.init_eval_data()
     ex_start_time = time.time()
@@ -150,6 +151,8 @@ def train(model):
         checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
         #saver.save(sess, checkpoint_path, global_step=epoch_num)
         saver.save(sess, checkpoint_path)
+      elif not FLAGS.save_net:
+        print('WARNING: not saving...')
 
     coord.request_stop()
     coord.join(threads)
