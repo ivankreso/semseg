@@ -3,6 +3,7 @@ import tensorflow as tf
 import train_helper
 
 MODEL_PATH = './models/voc2012/dense_net.py'
+#MODEL_PATH = './models/voc2012/resnet.py'
 SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/voc2012/',
                         train_helper.get_time_string())
 
@@ -39,8 +40,8 @@ tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
 tf.app.flags.DEFINE_integer('max_epochs', 40, 'Number of epochs to run.')
 #tf.app.flags.DEFINE_integer('max_epochs', 50, 'Number of epochs to run.')
 
-tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.5,
-                          """Learning rate decay factor.""")
+#tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.5,
+#                          """Learning rate decay factor.""")
 
 #povecaj_lr za w=1
 FLAGS = tf.app.flags.FLAGS

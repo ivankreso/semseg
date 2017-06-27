@@ -25,12 +25,12 @@ FLAGS = tf.app.flags.FLAGS
 data_mean = [103.19996733, 112.43425923, 116.49585869]
 #data_std = [60.37073962, 59.39268441, 60.74823033]
 
-root_dir = '/home/kivan/datasets/voc2012_aug'
+root_dir = FLAGS.dataset_dir
 if FLAGS.no_valid:
-  train_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, 'trainval.txt'), 'trainval')
+  train_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, '../trainval.txt'), 'trainval')
 else:
-  train_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, 'train.txt'), 'train')
-  valid_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, 'val.txt'), 'val')
+  train_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, '../train.txt'), 'train')
+  valid_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, '../val.txt'), 'val')
 
 print('Num training examples = ', train_dataset.num_examples())
 
@@ -45,6 +45,7 @@ MODEL_DEPTH = 50
 init_func = layers.variance_scaling_initializer()
 weight_decay = 1e-4
 apply_jitter = True
+jitter_scale = False
 known_shape = True
 
 context_size = 512
@@ -336,10 +337,11 @@ def _build(image, is_training=False):
         normalizer_fn=layers.batch_norm, normalizer_params=bn_params,
         weights_initializer=init_func,
         weights_regularizer=layers.l2_regularizer(weight_decay)):
-      l = layers.conv2d(l, 1024, kernel_size=1, scope='conv1')
+      #l = layers.conv2d(l, 1024, kernel_size=1, scope='conv1')
+      l = layers.conv2d(l, 512, kernel_size=1, scope='conv1')
       #l = layers.conv2d(l, context_size, kernel_size=3, rate=4, scope='conv2')
-      #l = _pyramid_pooling(l, size=4)
-      l = _pyramid_pooling(l, size=2)
+      l = _pyramid_pooling(l, size=4)
+      #l = _pyramid_pooling(l, size=2)
       logits_mid = l
       #final_h = l.get_shape().as_list()[1]
       #if final_h >= 10:
@@ -358,13 +360,13 @@ def _build(image, is_training=False):
       print(l)
 
     logits_mid = layers.conv2d(logits_mid, FLAGS.num_classes, 1, weights_initializer=init_func,
-                           activation_fn=None, scope='logits_mid')
+                               activation_fn=None, scope='logits_mid')
     logits = layers.conv2d(l, FLAGS.num_classes, 1, weights_initializer=init_func,
                            activation_fn=None, scope='logits')
     input_shape = tf.shape(image)[1:3]
     logits_mid = tf.image.resize_bilinear(logits_mid, input_shape, name='resize_logits_mid')
     logits = tf.image.resize_bilinear(logits, input_shape, name='resize_logits')
-    return logits, logits_mid
+    return logits, [logits_mid]
 
 
 def create_init_op(params):
@@ -383,8 +385,7 @@ def create_init_op(params):
   return init_op, init_feed
 
 
-
-def jitter(image, labels, weights):
+def jitter(image, labels):
   with tf.name_scope('jitter'), tf.device('/cpu:0'):
     print('\nJittering enabled')
     global random_flip_tf, resize_width, resize_height
@@ -394,47 +395,38 @@ def jitter(image, labels, weights):
     resize_height = tf.placeholder(tf.int32, shape=(), name='resize_height')
     
     #image_split = tf.unstack(image, axis=0)
-    #depth_split = tf.unstack(depth, axis=0)
-    #weights_split = tf.unstack(weights, axis=0)
     #labels_split = tf.unstack(labels, axis=0)
+    #weights_split = tf.unstack(weights, axis=0)
     out_img = []
-    out_wgt = []
     #out_weights = []
     out_labels = []
-    #image = tf.Print(image, [image[0]], message='img1 = ', summarize=10)
     for i in range(FLAGS.batch_size):
       out_img.append(tf.cond(random_flip_tf[i],
-        lambda: tf.image.flip_left_right(image[i]), lambda: image[i]))
-        #lambda: tf.image.flip_left_right(image_split[i]),
-        #lambda: image_split[i]))
-      out_wgt.append(tf.cond(random_flip_tf[i],
-        lambda: tf.image.flip_left_right(weights[i]),
-        lambda: weights[i]))
-      #print(cond_op)
-      #image_split[i] = tf.assign(image_split[i], cond_op)
-      #image[i] = tf.cond(random_flip_tf, lambda: tf.image.flip_left_right(image[i]),
-      #cond_op = tf.cond(random_flip_tf, lambda: tf.image.flip_left_right(image[i]),
-                         #lambda: tf.identity(image[i]))
-      #image[i] = tf.assign(image[i], cond_op)
-      print(labels)
-      out_labels.append(tf.cond(random_flip_tf[i], lambda: tf.image.flip_left_right(labels[i]),
-                        lambda: labels[i]))
-      #out_weights.append(tf.cond(random_flip_tf[i], lambda: tf.image.flip_left_right(weights[i]),
-      #                   lambda: weights[i]))
+        lambda: tf.image.flip_left_right(image[i]),
+        lambda: image[i]))
+      out_labels.append(tf.cond(random_flip_tf[i],
+        lambda: tf.image.flip_left_right(labels[i]),
+        lambda: labels[i]))
+      #out_weights.append(tf.cond(random_flip_tf[i],
+      #  lambda: tf.image.flip_left_right(weights[i]),
+      #  lambda: weights[i]))
     image = tf.stack(out_img, axis=0)
-    weights = tf.stack(out_wgt, axis=0)
-    #weights = tf.stack(out_weights, axis=0)
     labels = tf.stack(out_labels, axis=0)
-    #image = tf.Print(image, [random_flip_tf], message='random_flip_tf = ', summarize=10)
-    #image = tf.Print(image, [image[0]], message='img = ', summarize=10)
+    #weights = tf.stack(out_weights, axis=0)
 
-    # TODO
-    #image = tf.image.resize_bicubic(image, [resize_height, resize_width])
-    #depth = tf.image.resize_bilinear(depth, [resize_height, resize_width])
-    #labels = tf.image.resize_nearest_neighbor(labels, [resize_height, resize_width])
-    #weights = tf.image.resize_nearest_neighbor(weights, [resize_height, resize_width])
-    #return image, labels, weights, depth
-    return image, labels, weights
+    if jitter_scale:
+      global known_shape
+      known_shape = False
+      image = tf.image.resize_bicubic(image, [resize_height, resize_width])
+      #image = tf.image.resize_bilinear(image, [resize_height, resize_width])
+      image = tf.round(image)
+      image = tf.minimum(255.0, image)
+      image = tf.maximum(0.0, image)
+      labels = tf.image.resize_nearest_neighbor(labels, [resize_height, resize_width])
+      # TODO is this safe for zero wgts?
+      #weights = tf.image.resize_nearest_neighbor(weights, [resize_height, resize_width])
+    #return image, labels, weights
+    return image, labels
 
 
 def _get_train_feed():
@@ -467,16 +459,18 @@ def build(mode):
     dataset = valid_dataset
 
   with tf.variable_scope('', reuse=reuse):
-    x, labels, weights, num_labels, img_names = \
+    x, labels, num_labels, class_hist, img_names = \
       reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
     if is_training and apply_jitter:
-      x, labels, weights = jitter(x, labels, weights)
+      x, labels = jitter(x, labels)
+    image = x
     x = normalize_input(x)
 
     #logits = _build(x, depth, is_training)
     #total_loss = _loss(logits, labels, weights, is_training)
-    logits, mid_logits = _build(x, is_training)
-    total_loss = _multiloss(logits, mid_logits, labels, weights, num_labels, is_training)
+    logits, aux_logits = _build(x, is_training)
+    #total_loss = _multiloss(logits, mid_logits, labels, weights, num_labels, is_training)
+    total_loss = _multiloss(logits, aux_logits, labels, class_hist, num_labels, is_training)
 
     if is_training and imagenet_init:
       MODEL_PATH ='/home/kivan/datasets/pretrained/resnet/ResNet'+str(MODEL_DEPTH)+'.npy'
@@ -502,36 +496,31 @@ def build(mode):
       return run_ops
 
 
-def inference(image, constant_shape=True):
+def inference(image, labels=None, constant_shape=True, is_training=False):
   global known_shape
   known_shape = constant_shape
   x = normalize_input(image)
-  logits, mid_logits = _build(x, is_training=False)
-  return logits, mid_logits
+  logits, aux_logits = _build(x, is_training=is_training)
+  if labels:
+    main_wgt = 0.7
+    xent_loss = main_wgt * losses.weighted_cross_entropy_loss(logits, labels)
+    xent_loss = (1-main_wgt) * losses.weighted_cross_entropy_loss(aux_logits, labels)
+    return logits, aux_logits, xent_loss
+  return logits, aux_logits
 
 
-#def _multiloss(logits, mid_logits, labels, weights, is_training=True):
-def _multiloss(logits, mid_logits, labels, weights, num_labels, is_training):
-  #gpu = '/gpu:1'
-  gpu = '/gpu:0'
-  with tf.device(gpu):
-    max_weight = FLAGS.max_weight
-    #max_weight = 10
-    #max_weight = 50
-    loss1 = losses.weighted_cross_entropy_loss_dense(
-        logits, labels, weights, num_labels, max_weight=max_weight)
-    loss2 = losses.weighted_cross_entropy_loss_dense(
-        mid_logits, labels, weights, num_labels, max_weight=max_weight)
-    #loss1 = losses.weighted_cross_entropy_loss(logits, labels, weights,
-    #    max_weight=max_weight)
-    #loss2 = losses.weighted_cross_entropy_loss(mid_logits, labels, weights,
-    #    max_weight=max_weight)
-    #wgt = 0.4
-    #xent_loss = loss1 + wgt * loss2
-    wgt = 0.3 # best
-    #wgt = 0.2
-    #wgt = 0.4
-    xent_loss = (1-wgt)*loss1 + wgt*loss2
+def _multiloss(logits, aux_logits, labels, num_labels, class_hist, is_training):
+  max_weight = FLAGS.max_weight
+  xent_loss = 0
+  #main_wgt = 0.6
+  main_wgt = 0.7
+  aux_wgt = (1 - main_wgt) / len(aux_logits)
+  xent_loss = main_wgt * losses.weighted_cross_entropy_loss(
+      logits, labels, class_hist, max_weight=max_weight)
+  for i, l in enumerate(aux_logits):
+    print('loss' + str(i), ' --> ' , l)
+    xent_loss += aux_wgt * losses.weighted_cross_entropy_loss(
+      l, labels, class_hist, max_weight=max_weight)
 
   all_losses = [xent_loss]
   # get losses + regularization
@@ -540,37 +529,33 @@ def _multiloss(logits, mid_logits, labels, weights, num_labels, is_training):
     loss_averages_op = losses.add_loss_summaries(total_loss)
     with tf.control_dependencies([loss_averages_op]):
       total_loss = tf.identity(total_loss)
-
   return total_loss
-
 
 def minimize(loss, global_step, num_batches):
   # Calculate the learning rate schedule.
-  decay_steps = int(num_batches * FLAGS.num_epochs_per_decay)
+  #decay_steps = int(num_batches * FLAGS.num_epochs_per_decay)
   # Decay the learning rate exponentially based on the number of steps.
   global lr
   #base_lr = 1e-2 # for sgd
   base_lr = FLAGS.initial_learning_rate
-  stairs = True
-  #stairs = False
   #TODO
   #fine_lr_div = 5
-  #fine_lr_div = 10
-  fine_lr_div = 7
-  print('fine_lr = base_lr / ', fine_lr_div)
+  fine_lr_div = 10
+  #fine_lr_div = 7
+  print('LR = ', base_lr)
+  print('fine_lr = LR / ', fine_lr_div)
   #lr_fine = tf.train.exponential_decay(base_lr / 10, global_step, decay_steps,
   #lr_fine = tf.train.exponential_decay(base_lr / 20, global_step, decay_steps,
 
-  #power = 0.9
-  power = 1.0
   #decay_steps = int(num_batches * 30)
   decay_steps = num_batches * FLAGS.max_epochs
   lr_fine = tf.train.polynomial_decay(base_lr / fine_lr_div, global_step, decay_steps,
-                                      end_learning_rate=0, power=power)
+                                      end_learning_rate=0, power=FLAGS.decay_power)
   lr = tf.train.polynomial_decay(base_lr, global_step, decay_steps,
-                                 end_learning_rate=0, power=power)
+                                 end_learning_rate=0, power=FLAGS.decay_power)
   #lr = tf.Print(lr, [lr], message='lr = ', summarize=10)
 
+  #stairs = True
   #lr_fine = tf.train.exponential_decay(base_lr / fine_lr_div, global_step, decay_steps,
   #                                FLAGS.learning_rate_decay_factor, staircase=stairs)
   #lr = tf.train.exponential_decay(base_lr, global_step, decay_steps,
@@ -578,8 +563,14 @@ def minimize(loss, global_step, num_batches):
   tf.summary.scalar('learning_rate', lr)
   # adam works much better here!
   if imagenet_init:
-    #opts = [tf.train.AdamOptimizer(lr_fine), tf.train.AdamOptimizer(lr)]
-    opts = [tf.train.MomentumOptimizer(lr_fine, 0.9), tf.train.MomentumOptimizer(lr, 0.9)]
+    if FLAGS.optimizer == 'adam':
+      print('\nOptimizer = ADAM\n')
+      opts = [tf.train.AdamOptimizer(lr_fine), tf.train.AdamOptimizer(lr)]
+    elif FLAGS.optimizer == 'momentum':
+      print('\nOptimizer = SGD + momentum\n')
+      opts = [tf.train.MomentumOptimizer(lr_fine, 0.9), tf.train.MomentumOptimizer(lr, 0.9)]
+    else:
+      raise ValueError('unknown optimizer')
     return train_helper.minimize_fine_tune(opts, loss, global_step, 'head')
   else:
     #opt = tf.train.AdamOptimizer(lr)
@@ -588,6 +579,7 @@ def minimize(loss, global_step, num_batches):
   #opts = [tf.train.RMSPropOptimizer(lr_fine, momentum=0.9, centered=True),
   #        tf.train.RMSPropOptimizer(lr, momentum=0.9, centered=True)]
   #opts = [tf.train.MomentumOptimizer(lr_fine, 0.9), tf.train.MomentumOptimizer(lr, 0.9)]
+
 
 
 def train_step(sess, run_ops):

@@ -197,7 +197,7 @@ def draw_depth_prediction(name, epoch_num, step, yp, yt, img_names):
     cv2.imwrite(save_path, yt[i])
 
 
-def draw_output(y, class_colors, save_path):
+def draw_output(y, class_colors, save_path=None):
   width = y.shape[1]
   height = y.shape[0]
   y_rgb = np.zeros((height, width, 3), dtype=np.uint8)
@@ -213,7 +213,9 @@ def draw_output(y, class_colors, save_path):
     #  pixels = np.array(class_colors[cid][:3] * (pixels.size // 3), dtype=np.uint8)
     #y_rgb[np.repeat(np.equal(y, cid).reshape((height, width, 1)), 3, axis=2)].reshape((-1, 3)) = \
     #    class_colors[cid][:3]
-  ski.io.imsave(save_path, y_rgb)
+  if save_path:
+    ski.io.imsave(save_path, y_rgb)
+  return y_rgb
 
 
 def draw_prediction_slow(y, colors, path):

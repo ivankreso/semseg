@@ -115,8 +115,7 @@ class CityscapesDataset(Dataset):
     if not i.ignoreInEval:
       train_ids.append(i.id)
 
-
-  CLASS_INFO = [[128,64,128,   'road'],
+  class_info = [[128,64,128,   'road'],
                 [244,35,232,   'sidewalk'],
                 [70,70,70,     'building'],
                 [102,102,156,  'wall'],
@@ -136,8 +135,8 @@ class CityscapesDataset(Dataset):
                 [0,0,230,      'motorcycle'],
                 [119,11,32,    'bicycle']]
 
-  CLASS_COLOR_MAP = _create_class_data(CLASS_INFO)
-  NUM_CLASSES = 19
+  class_color_map = _create_class_data(class_info)
+  num_classes = 19
 
   #@staticmethod
   #def class_info():
@@ -145,4 +144,4 @@ class CityscapesDataset(Dataset):
 
   def __init__(self, data_dir, subset):
     super(CityscapesDataset, self).__init__(data_dir, subset)
-    self.num_classes = CityscapesDataset.NUM_CLASSES
+    self.num_classes = CityscapesDataset.num_classes
