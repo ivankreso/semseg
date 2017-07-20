@@ -15,16 +15,10 @@ import train_helper
 import losses
 import eval_helper
 #import datasets.reader_rgb as reader
-#import datasets.reader as reader
-import datasets.reader_mux as reader
+import datasets.reader as reader
 from datasets.cityscapes.cityscapes import CityscapesDataset as Dataset
 
 FLAGS = tf.app.flags.FLAGS
-
-dataset_dir = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
-                           '{}x{}_pyramid'.format(FLAGS.img_width, FLAGS.img_height))
-                           #'{}x{}_pyramid_last3'.format(FLAGS.img_width, FLAGS.img_height))
-tf.app.flags.DEFINE_string('dataset_dir', dataset_dir, '')
 
 # RGB
 data_mean =  [75.2051479, 85.01498926, 75.08929598]
@@ -33,11 +27,15 @@ data_std =  [46.89434904, 47.63335775, 46.47197535]
 depth_mean = 37.79630544
 depth_std = 29.21617326
 
+dataset_dir = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
+                           '{}x{}'.format(FLAGS.img_width, FLAGS.img_height))
 #root_dir = '/home/kivan/datasets/voc2012_aug'
 #root_dir = '/home/kivan/datasets/VOC2012/ImageSets/Segmentation'
 if FLAGS.no_valid:
   train_dataset = Dataset(dataset_dir, ['train', 'val'])
 else:
+  #train_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, '../train.txt'), 'train')
+  #valid_dataset = Dataset(FLAGS.dataset_dir, join(root_dir, '../val.txt'), 'val')
   train_dataset = Dataset(dataset_dir, ['train'])
   valid_dataset = Dataset(dataset_dir, ['val'])
 
@@ -185,15 +183,10 @@ def normalize_input(img):
     return img
 
 
-def resize_tensor(net, shape, name, method='bilinear'):
+def resize_tensor(net, shape, name):
   if data_format == 'NCHW':
     net = tf.transpose(net, perm=[0,2,3,1])
-  if method == 'bilinear':
-    net = tf.image.resize_bilinear(net, shape, name=name)
-  elif method == 'nn':
-    net = tf.image.resize_nearest_neighbor(net, shape, name=name)
-  else:
-    raise ValueError()
+  net = tf.image.resize_bilinear(net, shape, name=name)
   if data_format == 'NCHW':
     net = tf.transpose(net, perm=[0,3,1,2])
   return net
@@ -426,46 +419,8 @@ def dense_block_context(net):
     net = tf.concat(outputs, maps_dim)
   return net
 
-def get_depth_mux(net, mux_indices, skip_layers):
-  concat_lst = []
-  num_maps = 256
-  #num_maps = 128
-  #num_maps = 64
-  #for i in range(1, len(skip_layers)):
-  indices_shape = mux_indices.get_shape().as_list()
-  batch_size = indices_shape[0]
-  for i in range(len(skip_layers)):
-    net = skip_layers[i][0]
-    name = skip_layers[i][1]
-    print('skip ' + str(i) + ' = ', net)
-    net = BNReluConv(net, num_maps, name+'_bottleneck', k=1)
-    #net = resize_tensor(net, up_shape, skip_layers[i][1])
-    #sum_skip += net
-    net = tf.transpose(net, perm=[0,2,3,1])
-    net = tf.reshape(net, shape=[batch_size, -1, num_maps])
-    print('concat = ', net)
-    concat_lst.append(net)
-  net = tf.concat(concat_lst, 1)
-  #net = tf.transpose(net, perm=[0,2,3,1])
-  print('bg = ', net)
-  print('mux = ', mux_indices)
-  batch_range = tf.reshape(tf.range(indices_shape[0], dtype=tf.int32),
-                           shape=[indices_shape[0], 1, 1, 1, 1])
-  # TODO
-  batch_idx = tf.ones_like(mux_indices) * batch_range
-  print('bidx = ', batch_idx)
-  mux_indices = tf.concat([batch_idx, mux_indices], -1)
-  print('mux2 = ', mux_indices)
-  net = tf.gather_nd(net, mux_indices)
-  print('gatgher out = ', net)
-  gather_shape = net.get_shape().as_list()
-  concat_size = gather_shape[-1] * gather_shape[-2]
-  net = tf.reshape(net, shape=gather_shape[:-2] + [concat_size])
-  print(net)
-  net = tf.transpose(net, perm=[0,3,1,2])
-  return net
 
-def _build(image, mux_indices, is_training=False):
+def _build(image, is_training=False):
   #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
   bn_params['is_training'] = is_training
   with arg_scope([layers.conv2d],
@@ -524,26 +479,22 @@ def _build(image, mux_indices, is_training=False):
       up_shape = image_size(skip_layers[0][0])
       #concat_lst = [skip_layers[0][0]]
       #sum_skip = skip_layers[0][0]
-
-      net = get_depth_mux(net, mux_indices, skip_layers)
-
-      #concat_lst = []
       #num_maps = 256
-      #for i in range(len(skip_layers)-3, len(skip_layers)):
-      #  layer = skip_layers[i][0]
-      #  name = skip_layers[i][1]
-      #  #print('skip ' + str(i) + ' = ', net)
-      #  #with tf.variable_scope(tf.get_variable_scope(), reuse=True):
-      #  layer = BNReluConv(layer, num_maps, name+'_bottleneck', k=1)
-      #  layer = resize_tensor(layer, up_shape, skip_layers[i][1], 'nn')
-      #  #sum_skip += net
-      #  concat_lst.append(layer)
-      ##last3 = tf.concat(concat_lst, maps_dim)
-      ##last3 = tf.concat(list(reversed(concat_lst)), maps_dim)
-      #net = tf.concat(list(reversed(concat_lst)), maps_dim)
-      ##net = tf.Print(net, [tf.norm(net - last3)], message='norm = ')
-
-      print('mux out = ', net)
+      concat_lst = []
+      num_maps = 256
+      #num_maps = 128
+      #num_maps = 64
+      #for i in range(1, len(skip_layers)):
+      #for i in range(len(skip_layers)):
+      for i in range(len(skip_layers)-3, len(skip_layers)):
+        net = skip_layers[i][0]
+        name = skip_layers[i][1]
+        print('skip ' + str(i) + ' = ', net)
+        net = BNReluConv(net, num_maps, name+'_bottleneck', k=1)
+        net = resize_tensor(net, up_shape, skip_layers[i][1])
+        #sum_skip += net
+        concat_lst.append(net)
+      net = tf.concat(concat_lst, maps_dim)
       #net = sum_skip
       print(skip_layers)
       print('final net = ', net)
@@ -717,7 +668,7 @@ def build(mode):
     dataset = valid_dataset
 
   with tf.variable_scope('', reuse=reuse):
-    x, labels, mux_indices, num_labels, class_hist, depth, img_names = \
+    x, labels, num_labels, class_hist, depth, img_names = \
       reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
 
     if is_training and apply_jitter:
@@ -728,7 +679,7 @@ def build(mode):
     #logits = _build(x, depth, is_training)
     #total_loss = _loss(logits, labels, weights, is_training)
     #logits, mid_logits = _build(x, is_training)
-    logits, aux_logits = _build(x, mux_indices, is_training)
+    logits, aux_logits = _build(x, is_training)
     total_loss = _multiloss(logits, aux_logits, labels, class_hist, num_labels, is_training)
 
     if is_training and imagenet_init:

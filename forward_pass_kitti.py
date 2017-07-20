@@ -33,10 +33,11 @@ tf.app.flags.DEFINE_integer('img_height', 375, '')
 #DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/black/full/test'
 #SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/hood/'
 #DATA_DIR = '/home/kivan/datasets/KITTI/training/image_2'
-#DATA_DIR = '/home/kivan/datasets/KITTI/training/image_3'
-#SAVE_DIR = '/home/kivan/datasets/KITTI/out/train_right'
-DATA_DIR = '/home/kivan/datasets/KITTI/testing/image_3'
-SAVE_DIR = '/home/kivan/datasets/KITTI/out/test_right'
+#SAVE_DIR = '/home/kivan/datasets/KITTI/out_softmax/train_left'
+DATA_DIR = '/home/kivan/datasets/KITTI/training/image_3'
+SAVE_DIR = '/home/kivan/datasets/KITTI/out_softmax/train_right'
+#DATA_DIR = '/home/kivan/datasets/KITTI/testing/image_3'
+#SAVE_DIR = '/home/kivan/datasets/KITTI/out/test_right'
 
 #DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/black/croped/test'
 #SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/main/'
@@ -115,13 +116,15 @@ def save_predictions(sess, image, logits, codes, softmax, depth):
     print(out_code.shape)
     out_code = np.ascontiguousarray(out_code.transpose([1,2,0]))
     print(out_code.shape)
-    eval_helper.draw_output(y, Dataset.CLASS_INFO, os.path.join(FLAGS.save_dir, 'color', image_list[i]))
+    #eval_helper.draw_output(y, Dataset.CLASS_INFO, os.path.join(FLAGS.save_dir, 'color', image_list[i]))
     y_submit = map_to_submit_ids(y)
     save_path = join(FLAGS.save_dir, 'labels', image_list[i])
-    ski.io.imsave(save_path, y_submit)
+    #ski.io.imsave(save_path, y_submit)
     save_path = join(FLAGS.save_dir, 'embedding', image_list[i][:-3]+'npy')
     print(save_path)
-    np.save(save_path, out_code)
+    #np.save(save_path, out_code)
+    save_path = join(FLAGS.save_dir, 'softmax', image_list[i][:-3]+'npy')
+    np.save(save_path, out_softmax)
     #save_path = os.path.join(FLAGS.save_dir, 'softmax_' + image_list[i])
     #ski.io.imsave(save_path, p)
 
@@ -131,6 +134,7 @@ def main(argv=None):
   os.makedirs(join(FLAGS.save_dir, 'color'), exist_ok=True)
   os.makedirs(join(FLAGS.save_dir, 'labels'), exist_ok=True)
   os.makedirs(join(FLAGS.save_dir, 'embedding'), exist_ok=True)
+  os.makedirs(join(FLAGS.save_dir, 'softmax'), exist_ok=True)
   print(MODEL_PATH)
   spec = importlib.util.spec_from_file_location("model", MODEL_PATH)
   model = importlib.util.module_from_spec(spec)

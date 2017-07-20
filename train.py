@@ -29,9 +29,12 @@ def train(model):
   #config.operation_timeout_in_ms = 5000   # terminate on long hangs
   #sess = tf.Session(config=config)
   with tf.Session(config=config) as sess:
+    tf.set_random_seed(FLAGS.seed)
+    np.random.seed(FLAGS.seed)
     # Create a variable to count the number of train() calls. This equals the
     # number of batches processed * FLAGS.num_gpus.
-    global_step = tf.get_variable('global_step', [], initializer=tf.constant_initializer(0),
+    global_step = tf.get_variable('global_step', [],
+                                  initializer=tf.constant_initializer(0),
                                   trainable=False)
 
     # Build a Graph that computes the logits predictions from the inference model.
@@ -46,7 +49,7 @@ def train(model):
 
     print('\nNumber of parameters = ', num_params)
     # Create a saver.
-    saver = tf.train.Saver(tf.global_variables(), max_to_keep=FLAGS.max_epochs)
+    saver = tf.train.Saver(tf.global_variables(), max_to_keep=FLAGS.max_num_epochs)
 
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
@@ -80,13 +83,17 @@ def train(model):
     train_loss_val = 0
     train_data, valid_data = model.init_eval_data()
     ex_start_time = time.time()
-    for epoch_num in range(1, FLAGS.max_epochs + 1):
+    iter_num = 0
+    for epoch_num in range(1, FLAGS.max_num_epochs + 1):
       print('\nnvim ' + FLAGS.train_dir + 'model.py')
       print('tensorboard --logdir=' + FLAGS.train_dir + '\n')
       #num_batches = model.num_batches() // FLAGS.num_validations_per_epoch
       model.start_epoch(train_data)
       #for step in range(30):
       for step in range(num_batches):
+        if iter_num >= FLAGS.num_iters:
+          break
+        iter_num += 1
         start_time = time.time()
         run_ops = train_ops + [train_op, global_step]
         #run_ops = [train_op, loss, logits, labels, draw_data, img_name, global_step]
@@ -130,11 +137,11 @@ def train(model):
           examples_per_sec = FLAGS.batch_size / duration
           sec_per_batch = float(duration)
 
-          format_str = '%s: epoch %d, step %d / %d, loss = %.2f \
+          format_str = '%s: epoch %03d, step %04d / %04d, iter %06d / %06d, loss = %.2f \
             (%.1f examples/sec; %.3f sec/batch)'
           #print('lr = ', clr)
           print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num,
-                              step, model.num_batches(), loss_val,
+                              step, model.num_batches(), iter_num, FLAGS.num_iters, loss_val,
                               examples_per_sec, sec_per_batch))
       is_best = model.end_epoch(train_data)
       #train_helper.print_variable_diff(sess, init_vars)
@@ -153,6 +160,8 @@ def train(model):
         saver.save(sess, checkpoint_path)
       elif not FLAGS.save_net:
         print('WARNING: not saving...')
+      if iter_num >= FLAGS.num_iters:
+        break
 
     coord.request_stop()
     coord.join(threads)
@@ -178,7 +187,6 @@ def main(argv=None):  # pylint: disable=unused-argument
   copyfile(FLAGS.config_path, os.path.join(FLAGS.train_dir, 'config.py'))
 
   print('Experiment dir: ' + FLAGS.train_dir)
-  print('Dataset dir: ' + FLAGS.dataset_dir)
   train(model)
 
 

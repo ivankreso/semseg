@@ -16,6 +16,7 @@ def _read_and_decode(filename_queue):
           'num_labels': tf.FixedLenFeature([], tf.int64),
           'img_name': tf.FixedLenFeature([], tf.string),
           'image': tf.FixedLenFeature([], tf.string),
+          'mux_indices': tf.FixedLenFeature([], tf.string),
           'class_hist': tf.FixedLenFeature([], tf.string),
           'labels': tf.FixedLenFeature([], tf.string),
           'depth': tf.FixedLenFeature([], tf.string),
@@ -32,9 +33,15 @@ def _read_and_decode(filename_queue):
   labels = tf.to_int32(tf.decode_raw(features['labels'], tf.int8, name='decode_labels'))
   depth = tf.to_float(tf.decode_raw(features['depth'], tf.uint8, name='decode_depth'))
   image = tf.to_float(tf.decode_raw(features['image'], tf.uint8, name='decode_image'))
+  mux_indices = tf.decode_raw(features['mux_indices'], tf.int32, name='decode_indices')
   class_hist = tf.decode_raw(features['class_hist'], tf.int32, name='decode_class_hist')
 
   image = tf.reshape(image, shape=[FLAGS.img_height, FLAGS.img_width, FLAGS.img_depth])
+  num_scales = 3
+  mux_indices = tf.reshape(mux_indices,
+      shape=[FLAGS.img_height//4, FLAGS.img_width//4, num_scales, 1])
+  #mux_indices = tf.ones(shape=[FLAGS.img_height//4, FLAGS.img_width//4, num_scales, 1],
+  #    dtype=np.int32)
   depth = tf.reshape(depth, shape=[FLAGS.img_height, FLAGS.img_width, 1])
   #num_pixels = FLAGS.img_height * FLAGS.img_width
   #labels = tf.reshape(labels, shape=[num_pixels])
@@ -42,9 +49,9 @@ def _read_and_decode(filename_queue):
   #weights = tf.reshape(weights, shape=[num_pixels])
   #class_hist = tf.reshape(class_hist, shape=[FLAGS.img_height, FLAGS.img_width, 1])
   class_hist = tf.reshape(class_hist, shape=[FLAGS.num_classes])
-  #image = tf.Print(image, [img_name, image[100,100,:]], message="P1: ")
+  #image = tf.Print(image, [img_name], message="name: ")
 
-  return image, labels, num_labels, class_hist, depth, img_name
+  return image, labels, mux_indices, num_labels, class_hist, depth, img_name
 
 
 def num_examples(dataset):
@@ -72,20 +79,19 @@ def inputs(dataset, is_training=False, num_epochs=None):
 
   with tf.name_scope('input'), tf.device('/cpu:0'):
     filename_queue = tf.train.string_input_producer(dataset.get_filenames(), num_epochs=num_epochs,
-        shuffle=shuffle, seed=FLAGS.seed, capacity=dataset.num_examples())
-        #shuffle=shuffle, capacity=dataset.num_examples())
+        #shuffle=shuffle, seed=FLAGS.seed, capacity=dataset.num_examples())
+        shuffle=shuffle, capacity=dataset.num_examples())
 
     #filename_queue_size = tf.Print(filename_queue.size(), [filename_queue.size()])
     #with tf.control_dependencies([filename_queue_size]):
     #image, labels, weights, depth, img_name = _read_and_decode(filename_queue)
-    image, labels, num_labels, class_hist, depth, img_name = _read_and_decode(filename_queue)
+    image, labels, mux_indices, num_labels, class_hist, depth, img_name = _read_and_decode(filename_queue)
 
     # Shuffle the examples and collect them into batch_size batches.
     # Run this in two threads to avoid being a bottleneck.
-    image, labels, num_labels, class_hist, depth, img_name = tf.train.batch(
-        [image, labels, num_labels, class_hist, depth, img_name],
-        batch_size=batch_size, num_threads=1, capacity=64)
-        #batch_size=batch_size, num_threads=2, capacity=64)
+    image, labels, mux_indices, num_labels, class_hist, depth, img_name = tf.train.batch(
+        [image, labels, mux_indices, num_labels, class_hist, depth, img_name],
+        batch_size=batch_size, num_threads=2, capacity=64)
 
-    return image, labels, num_labels, class_hist, depth, img_name
+    return image, labels, mux_indices, num_labels, class_hist, depth, img_name
 

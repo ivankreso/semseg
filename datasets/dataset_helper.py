@@ -66,7 +66,7 @@ def get_scale_selection_routing(depth, net_subsampling, depth_routing, embed_siz
   width = depth.shape[1]
   height = height // net_subsampling
   width = width // net_subsampling
-  depth = ski.transform.resize(depth, (height, width), preserve_range=True, order=3)
+  #depth = ski.transform.resize(depth, (height, width), preserve_range=True, order=3)
   #print(depth.shape)
   #print(depth.min())
   #print(depth.max())

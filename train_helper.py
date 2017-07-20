@@ -25,6 +25,7 @@ def minimize_fine_tune(opts, loss, global_step, prefix):
   for i, v in enumerate(all_vars):
     #grads[i] = tf.Print(grads[i], [tf.reduce_mean(grads[i]),
     #  tf.reduce_sum(grads[i])], message=v.name+' = ', summarize=5)
+    #if v.name[:4] == prefix or v.name.find('block3') >= 0:
     if v.name[:4] == prefix:
       print(v.name, ' --> with base learning rate')
       head_grads_and_vars.append((grads[i], v))

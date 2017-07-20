@@ -4,19 +4,13 @@ from os.path import join
 import pickle
 import numpy as np
 import tensorflow as tf
-#import skimage as ski
-#import skimage.data
-#import skimage.transform
+import skimage as ski
+import skimage.data
+import skimage.transform
 #import cv2
 from tqdm import trange
-import PIL.Image as pimg
 
 import data_utils
-
-def imread(path):
-  img = pimg.open(path)
-  #print('bands = ', img.getbands())
-  return np.array(img)
 
 IMG_MEAN = [75, 85, 75]
 np.set_printoptions(linewidth=250)
@@ -65,12 +59,9 @@ tf.app.flags.DEFINE_boolean('downsample', True, '')
 ##tf.app.flags.DEFINE_integer('img_height', 208, '')
 #tf.app.flags.DEFINE_integer('img_height', 224, '')
 
-#INTERPOLACIJAA!!!
-
 tf.app.flags.DEFINE_string('save_dir',
     '/home/kivan/datasets/Cityscapes/tensorflow/' +
-    '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '/', '')
-    #'{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '_pyramid_last3/', '')
+    '{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '_pyramid_last3/', '')
     #'{}x{}'.format(FLAGS.img_width, FLAGS.img_height) + '_pyramid/', '')
 
 def _int64_feature(value):
@@ -183,8 +174,8 @@ def get_multiplexer_indices(depth, depth_routing, embed_sizes, filename, debug_s
         #routing_data[r,c,s] = routing[d]
 
         # TODO
-        level = routing[d]
-        #level = len(level_offsets) - 1 - s
+        #level = routing[d]
+        level = len(level_offsets) - 1 - s
 
         level_offset = level_offsets[level]
         #level_offset = 0
@@ -246,43 +237,38 @@ def prepare_dataset(name):
       img_name = img_list[i]
       img_prefix = img_name[:-4]
       rgb_path = root_dir + city + '/' + img_name
-      #rgb = ski.data.load(rgb_path)
-      rgb = pimg.open(rgb_path)
+      rgb = ski.data.load(rgb_path)
+      orig_height = rgb.shape[0]
       #rgb = cv2.imread(rgb_path, cv2.IMREAD_COLOR)
-      rgb = rgb.crop((cx_start,cy_start,cx_end,cy_end))
-      #rgb = np.ascontiguousarray(rgb[cy_start:cy_end,cx_start:cx_end,:])
+      rgb = np.ascontiguousarray(rgb[cy_start:cy_end,cx_start:cx_end,:])
       #rgb = cv2.resize(rgb, (width, height), interpolation=cv2.INTER_CUBIC)
       #rgb = ski.transform.resize(rgb, (height, width), preserve_range=True, order=3)
-      #rgb = ski.transform.resize(rgb, (height, width), preserve_range=True, order=2)
-      #rgb = ski.transform.resize(rgb, (height, width), preserve_range=True, order=2)
-      rgb = rgb.resize((width,height), pimg.BICUBIC)
-      rgb = np.array(rgb).astype(np.uint8)
-
-      orig_height = rgb.shape[0]
+      rgb = ski.transform.resize(rgb, (height, width), preserve_range=True, order=2)
+      rgb = rgb.astype(np.uint8)
       #depth_img = None
       depth_path = join(depth_dir, city, img_name[:-4] + '_leftImg8bit.png')
-      #depth_img = ski.data.load(depth_path)
-      depth_img = pimg.open(depth_path)
-      depth_img = depth_img.crop((cx_start,cy_start,cx_end,cy_end))
+      depth_img = ski.data.load(depth_path)
       #depth_img = cv2.imread(rgb_path)
-      #depth_img_full = np.ascontiguousarray(depth_img[cy_start:cy_end,cx_start:cx_end])
+      depth_img_full = np.ascontiguousarray(depth_img[cy_start:cy_end,cx_start:cx_end])
       #depth_img = cv2.resize(depth_img, (width, height), interpolation=cv2.INTER_NEAREST)
       #depth_img = ski.transform.resize(depth_img, (FLAGS.img_height, FLAGS.img_width),
       #                                 order=0, preserve_range=True)
-      #depth_img_input = ski.transform.resize(depth_img_full, (FLAGS.img_height, FLAGS.img_width),
-      #                                       order=2, preserve_range=True)
-      depth_img_input = depth_img.resize((width,height), pimg.BILINEAR)
-      depth_img_input = np.array(depth_img_input)
-      #print(depth_img.min(), depth_img.max())
+      depth_img_input = ski.transform.resize(depth_img_full, (FLAGS.img_height, FLAGS.img_width),
+                                             order=2, preserve_range=True)
 
       downsample_factor = 2048 / FLAGS.img_width
       depth_img_input = np.round(depth_img_input / (256.0 * downsample_factor)).astype(np.uint8)
 
       target_sub = 4
-      depth_img = depth_img.resize((width//target_sub, height//target_sub), pimg.BILINEAR)
-      depth_img = np.array(depth_img)
+      depth_img = ski.transform.resize(depth_img_full,
+                                       (FLAGS.img_height // target_sub,
+                                        FLAGS.img_width // target_sub),
+                                        #order=1, preserve_range=True)
+                                        order=2, preserve_range=True)
+                                        #order=0, preserve_range=True)
       depth_img = np.round(depth_img / (256.0 * downsample_factor))
       #depth_img /= downsample_factor
+      #print(depth_img.mean())
       #print(depth_img.min(), depth_img.max())
       depth_img = depth_img.astype(np.uint8)
       #depth_sum += depth_img
@@ -290,16 +276,11 @@ def prepare_dataset(name):
 
       gt_path = join(gt_dir, city, img_name[:-4] + '_gtFine_labelIds.png')
       #print(gt_path)
-      #full_gt_img = ski.data.load(gt_path)
-      full_gt_img = pimg.open(gt_path)
-      full_gt_img = full_gt_img.crop((cx_start,cy_start,cx_end,cy_end))
-      #full_gt_img = np.ascontiguousarray(full_gt_img[cy_start:cy_end,cx_start:cx_end])
+      full_gt_img = ski.data.load(gt_path)
+      full_gt_img = np.ascontiguousarray(full_gt_img[cy_start:cy_end,cx_start:cx_end])
       if FLAGS.downsample:
-        full_gt_img = full_gt_img.resize((width, height), pimg.NEAREST)
-        full_gt_img = np.array(full_gt_img).astype(np.uint8)
-        #full_gt_img = ski.transform.resize(full_gt_img, (FLAGS.img_height, FLAGS.img_width),
-        #                                   order=0, preserve_range=True).astype(np.uint8)
-      has_hood = True
+        full_gt_img = ski.transform.resize(full_gt_img, (FLAGS.img_height, FLAGS.img_width),
+                                           order=0, preserve_range=True).astype(np.uint8)
       if cy_end < orig_height:
         has_hood = False
       gt_img, car_mask = data_utils.convert_ids(full_gt_img, has_hood)
@@ -316,16 +297,16 @@ def prepare_dataset(name):
       #gt_ids_test = ski.util.img_as_ubyte(gt_ids_test).astype(np.int8)
       #assert (gt_ids != gt_ids_test).sum() == 0
 
-      #if name == 'val':
-      #  instance_gt_path = join(gt_dir, city, img_name[:-4] + '_gtFine_instanceIds.png')
-      #  instance_gt_img = ski.data.load(instance_gt_path)
-      #  instance_gt_img = np.ascontiguousarray(instance_gt_img[cy_start:cy_end,cx_start:cx_end])
-      #  if FLAGS.downsample:
-      #    instance_gt_img = ski.transform.resize(
-      #        instance_gt_img, (FLAGS.img_height, FLAGS.img_width),
-      #        order=0, preserve_range=True).astype(np.uint16)
-      #  ski.io.imsave(join(gt_save_dir, 'label', img_name[:-4]+'.png'), full_gt_img)
-      #  ski.io.imsave(join(gt_save_dir, 'instance', img_name[:-4]+'.png'), instance_gt_img)
+      if name == 'val':
+        instance_gt_path = join(gt_dir, city, img_name[:-4] + '_gtFine_instanceIds.png')
+        instance_gt_img = ski.data.load(instance_gt_path)
+        instance_gt_img = np.ascontiguousarray(instance_gt_img[cy_start:cy_end,cx_start:cx_end])
+        if FLAGS.downsample:
+          instance_gt_img = ski.transform.resize(
+              instance_gt_img, (FLAGS.img_height, FLAGS.img_width),
+              order=0, preserve_range=True).astype(np.uint16)
+        ski.io.imsave(join(gt_save_dir, 'label', img_name[:-4]+'.png'), full_gt_img)
+        ski.io.imsave(join(gt_save_dir, 'instance', img_name[:-4]+'.png'), instance_gt_img)
 
       #indices = get_multiplexer_indices(depth_img, input_sizes, subsample_rfs, pyramid_rfs)
       debug_dir = '/home/kivan/datasets/tmp/debug/multiplexer/'

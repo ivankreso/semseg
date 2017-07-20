@@ -172,7 +172,7 @@ def normalize_input(img):
       std = tf.constant(data_std, dtype=tf.float32, shape=[1,3,1,1])
     else:
       mean = data_mean
-      std = data_mean
+      std = data_std
     img = (img - mean) / std
     return img
 
