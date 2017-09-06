@@ -10,8 +10,8 @@ MODEL_PATH = './models/cityscapes/resnet.py'
 #MODEL_PATH = './models/cityscapes/dense_net_dilated.py'
 
 #IMG_WIDTH, IMG_HEIGHT = 2048, 1024
-#IMG_WIDTH, IMG_HEIGHT = 1024, 448
-IMG_WIDTH, IMG_HEIGHT = 768, 320
+IMG_WIDTH, IMG_HEIGHT = 1024, 448
+#IMG_WIDTH, IMG_HEIGHT = 768, 320
 
 SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/cityscapes',
                         train_helper.get_time_string())
@@ -55,15 +55,15 @@ SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/cityscapes',
 
 # SPP has 90K
 
-tf.app.flags.DEFINE_integer('num_iters', 30000, '')
-#tf.app.flags.DEFINE_integer('num_iters', 20000, '')
+#tf.app.flags.DEFINE_integer('num_iters', 30000, '')
+tf.app.flags.DEFINE_integer('num_iters', 20000, '')
 #tf.app.flags.DEFINE_integer('num_iters', 60000, '')
 tf.app.flags.DEFINE_integer('max_num_epochs', 100, 'Number of epochs to run.')
 
 ###tf.app.flags.DEFINE_integer('num_iters', 20000, '')
 tf.app.flags.DEFINE_string('optimizer', 'adam', '')
-#tf.app.flags.DEFINE_float('decay_power', 1.5, '')
-tf.app.flags.DEFINE_float('decay_power', 1.4, '')
+tf.app.flags.DEFINE_float('decay_power', 1.5, '')
+#tf.app.flags.DEFINE_float('decay_power', 1.4, '')
 tf.app.flags.DEFINE_float('initial_learning_rate', 5e-4, '')
 
 #tf.app.flags.DEFINE_integer('max_epochs', 40, 'Number of epochs to run.')
@@ -113,7 +113,7 @@ tf.app.flags.DEFINE_integer('max_weight', 1, '')
 # 1-4
 #tf.app.flags.DEFINE_integer('batch_size', 1, '')
 #tf.app.flags.DEFINE_integer('batch_size', 2, '')
-tf.app.flags.DEFINE_integer('batch_size', 3, '')
+tf.app.flags.DEFINE_integer('batch_size', 4, '')
 tf.app.flags.DEFINE_integer('batch_size_valid', 2, '')
 tf.app.flags.DEFINE_integer('num_validations_per_epoch', 1, '')
 
@@ -141,7 +141,7 @@ tf.app.flags.DEFINE_string('debug_dir', os.path.join(SAVE_DIR, 'debug'), '')
 tf.app.flags.DEFINE_integer('num_classes', 19, '')
 tf.app.flags.DEFINE_boolean('log_device_placement', False, 'Whether to log device placement.')
 tf.app.flags.DEFINE_boolean('draw_predictions', False, 'Whether to draw.')
-tf.app.flags.DEFINE_boolean('save_net', False, 'Whether to save.')
+tf.app.flags.DEFINE_boolean('save_net', True, 'Whether to save.')
 tf.app.flags.DEFINE_boolean('no_valid', False, '')
 
 

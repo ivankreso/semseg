@@ -23,7 +23,8 @@ np.set_printoptions(linewidth=250)
 DATA_DIR = '/home/kivan/datasets/VOC2012/test_data'
 
 tf.app.flags.DEFINE_string('model_dir',
-    '/home/kivan/datasets/results/tmp/voc2012/25_5_22-30-16', '')
+    #'/home/kivan/datasets/results/tmp/voc2012/25_7_16-38-50/', '')
+    #'/home/kivan/datasets/results/tmp/voc2012/25_5_22-30-16', '')
 FLAGS = tf.app.flags.FLAGS
 
 

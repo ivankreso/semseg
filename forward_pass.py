@@ -24,6 +24,7 @@ import datasets.reader as reader
 tf.app.flags.DEFINE_integer('img_width', 2048, '')
 tf.app.flags.DEFINE_integer('img_height', 1024, '')
 #tf.app.flags.DEFINE_integer('img_height', 896, '')
+tf.app.flags.DEFINE_boolean('no_valid', False, '')
 
 #DATA_DIR = '/home/kivan/datasets/Cityscapes/orig/test'
 #DATA_DIR = '/home/kivan/datasets/Cityscapes/orig/test_masked'
@@ -34,13 +35,15 @@ tf.app.flags.DEFINE_integer('img_height', 1024, '')
 #SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/hood/'
 DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/mean/full/test'
 DEPTH_DIR = '/home/kivan/datasets/Cityscapes/2048x1024/depth/test'
-SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/submit_75.5'
+SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/submit_DN169'
 
 #DATA_DIR = '/home/kivan/datasets/Cityscapes/masked/black/croped/test'
 #SAVE_DIR = '/home/kivan/datasets/results/out/cityscapes/main/'
 
 #NET_DIR = '/home/kivan/datasets/results/iccv/03_7_3_17-57-58/'
-NET_DIR = '/home/kivan/datasets/results/iccv/cityscapes/full_best_16_3_16-25-14/'
+#NET_DIR = '/home/kivan/datasets/results/iccv/cityscapes/full_best_16_3_16-25-14/'
+#NET_DIR = '/home/kivan/datasets/results/tmp/cityscapes/25_7_19-25-45/'
+NET_DIR = '/home/kivan/datasets/results/iccv2/cityscapes_75.75_25_7_14-03-35/'
 #NET_DIR = '/home/kivan/datasets/results/tmp/cityscapes/22_3_10-50-51/'
 #NET_DIR = '/home/kivan/datasets/results/tmp/cityscapes/28_3_07-01-21/'
 MODEL_PATH = NET_DIR + 'model.py'
@@ -112,10 +115,13 @@ def save_predictions(sess, image, logits, softmax, depth):
       #p = np.amax(out_softmax, axis=2)
       #print('Over 90% = ', (p > 0.9).sum() / p.size)
       #print(p)
-      eval_helper.draw_output(y, Dataset.CLASS_INFO, os.path.join(FLAGS.save_dir, 'color', image_list[i]))
+      eval_helper.draw_output(y, Dataset.class_info,
+          os.path.join(FLAGS.save_dir, 'color', image_list[i]))
       y_submit = map_to_submit_ids(y)
       save_path = join(FLAGS.save_dir, 'labels', image_list[i])
       ski.io.imsave(save_path, y_submit)
+      cylib.collect_confusion_matrix(net_labels.reshape(-1),
+                                     labels.reshape(-1), conf_mat)
       #save_path = os.path.join(FLAGS.save_dir, 'softmax_' + image_list[i])
       #ski.io.imsave(save_path, p)
 

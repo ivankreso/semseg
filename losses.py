@@ -50,6 +50,63 @@ def total_loss_sum(losses):
   return total_loss
 
 
+def cross_entropy_loss(logits, labels):
+  print('loss: cross-entropy')
+  num_pixels = -1
+  with tf.name_scope(None, 'CrossEntropyLoss', [logits, labels]):
+    labels = tf.reshape(labels, shape=[num_pixels])
+    logits = tf.reshape(logits, [num_pixels, FLAGS.num_classes])
+    mask = labels < FLAGS.num_classes
+    idx = tf.where(mask)
+    # # labels = tf.reshape(labels, shape=[num_pixels])
+    # print(idx)
+    labels = tf.to_float(labels)
+    labels = tf.gather_nd(labels, idx)
+    # labels = tf.boolean_mask(labels, mask)
+    labels = tf.to_int32(labels)
+    logits = tf.gather_nd(logits, idx)
+    # logits = tf.boolean_mask(logits, mask)
+
+    
+    onehot_labels = tf.one_hot(labels, FLAGS.num_classes)
+    xent = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=onehot_labels)
+    
+    # range_idx = tf.range(tf.shape(labels)[0], dtype=tf.int32)
+    # print(range_idx, labels)
+    # labels = tf.reshape(labels, shape=[-1,1])
+    # range_idx = tf.reshape(range_idx, shape=[-1,1])
+    # idx = tf.concat([range_idx, labels], axis=1)
+    # print(idx)
+    # probs = tf.nn.softmax(logits)
+    # probs = tf.gather_nd(probs, idx)
+    # print(probs)
+    # xent = tf.square(1 - probs) * xent
+    # # xent = tf.pow(1 - probs, 3) * xent
+    # # xent = (1 - probs) * xent
+
+    #num_labels = tf.to_float(tf.reduce_sum(num_labels))
+    #num_labels = tf.reduce_sum(tf.to_float(num_labels))
+
+    #class_hist = tf.Print(class_hist, [class_hist], 'hist = ', summarize=30)
+    #num_labels = tf.reduce_sum(onehot_labels)
+
+    #class_hist = tf.to_float(tf.reduce_sum(class_hist, axis=0))
+    ##num_labels = tf.Print(num_labels, [num_labels, tf.reduce_sum(onehot_labels)], 'lab = ', summarize=30)
+    #class_weights = num_labels / (class_hist + 1)
+    ##class_weights = tf.Print(class_weights, [class_weights], 'wgt hist = ', summarize=30)
+    ## we need to append 0 here for ignore pixels
+    #class_weights = tf.concat([class_weights, [0]], axis=0)
+    ##class_weights = tf.Print(class_weights, [class_weights], 'wgt hist = ', summarize=30)
+    #class_weights = tf.minimum(tf.to_float(max_weight), class_weights)
+
+    # class_weights = tf.ones([FLAGS.num_classes])
+    # class_weights = tf.concat([class_weights, [0]], axis=0)
+    # #class_weights = tf.Print(class_weights, [class_weights], 'wgt hist = ', summarize=30)
+    # weights = tf.gather(class_weights, labels)
+
+    xent = tf.reduce_mean(xent)
+    return xent
+
 def weighted_cross_entropy_loss(logits, labels, class_hist=None, max_weight=1):
   print('loss: cross-entropy')
   print('Using balanced loss with max weight = ', max_weight)
@@ -125,7 +182,7 @@ def weighted_cross_entropy_loss_dense(logits, labels, weights=None,
     return xent
 
 
-def cross_entropy_loss(logits, labels, weights, num_labels):
+def cross_entropy_loss_old(logits, labels, weights, num_labels):
   print('loss: cross-entropy')
   num_pixels = -1
   with tf.name_scope(None, 'CrossEntropyLoss', [logits, labels, num_labels]):

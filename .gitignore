@@ -10,4 +10,5 @@
 
 notebooks/.ipynb_checkpoints
 .ropeproject/
+.vscode/
 __pycache__

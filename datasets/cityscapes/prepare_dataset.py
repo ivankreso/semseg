@@ -23,12 +23,18 @@ tf.app.flags.DEFINE_string('gt_dir',
     '/home/kivan/datasets/Cityscapes/orig/gtFine/', '')
 tf.app.flags.DEFINE_integer('num_classes', 19, '')
 
-#tf.app.flags.DEFINE_integer('img_width', 320, '')
-#tf.app.flags.DEFINE_integer('img_height', 144, '')
 #tf.app.flags.DEFINE_integer('img_width', 1024, '')
 #tf.app.flags.DEFINE_integer('img_height', 448, '')
-tf.app.flags.DEFINE_integer('img_width', 768, '')
-tf.app.flags.DEFINE_integer('img_height', 320, '')
+#tf.app.flags.DEFINE_boolean('fullres', False, '')
+
+tf.app.flags.DEFINE_integer('img_width', 2048, '')
+tf.app.flags.DEFINE_integer('img_height', 1024, '')
+tf.app.flags.DEFINE_boolean('fullres', True, '')
+
+#tf.app.flags.DEFINE_integer('img_width', 320, '')
+#tf.app.flags.DEFINE_integer('img_height', 144, '')
+#tf.app.flags.DEFINE_integer('img_width', 768, '')
+#tf.app.flags.DEFINE_integer('img_height', 320, '')
 # leave out the car hood
 tf.app.flags.DEFINE_integer('cx_start', 0, '')
 tf.app.flags.DEFINE_integer('cx_end', 2048, '')
@@ -47,7 +53,6 @@ tf.app.flags.DEFINE_integer('cy_end', 900, '')
 #tf.app.flags.DEFINE_integer('img_height', 272, '')
 #tf.app.flags.DEFINE_integer('img_width', 384, '')
 #tf.app.flags.DEFINE_integer('img_height', 164, '')
-tf.app.flags.DEFINE_boolean('downsample', True, '')
 #tf.app.flags.DEFINE_integer('img_width', 1600, '')
 #tf.app.flags.DEFINE_integer('img_height', 680, '')
 
@@ -136,8 +141,9 @@ def prepare_dataset(name):
       #rgb = ski.data.load(rgb_path)
       rgb = pimg.open(rgb_path)
       orig_height = rgb.size[1]
-      rgb = rgb.crop((cx_start,cy_start,cx_end,cy_end))
-      rgb = rgb.resize((width,height), pimg.BICUBIC)
+      if not FLAGS.fullres:
+        rgb = rgb.crop((cx_start,cy_start,cx_end,cy_end))
+        rgb = rgb.resize((width,height), pimg.BICUBIC)
       rgb = np.array(rgb).astype(np.uint8)
 
       #rgb = cv2.imread(rgb_path, cv2.IMREAD_COLOR)
@@ -151,11 +157,12 @@ def prepare_dataset(name):
       depth_img = pimg.open(depth_path)
       #depth_img = cv2.imread(rgb_path)
       #depth_img = np.ascontiguousarray(depth_img[cy_start:cy_end,cx_start:cx_end])
-      depth_img = depth_img.crop((cx_start,cy_start,cx_end,cy_end))
-      #depth_img = cv2.resize(depth_img, (width, height), interpolation=cv2.INTER_NEAREST)
-      depth_img = depth_img.resize((width,height), pimg.BILINEAR)
-      #depth_img = ski.transform.resize(depth_img, (FLAGS.img_height, FLAGS.img_width),
-      #                                 order=0, preserve_range=True)
+      if not FLAGS.fullres:
+        depth_img = depth_img.crop((cx_start,cy_start,cx_end,cy_end))
+        depth_img = depth_img.resize((width,height), pimg.BILINEAR)
+        #depth_img = cv2.resize(depth_img, (width, height), interpolation=cv2.INTER_NEAREST)
+        #depth_img = ski.transform.resize(depth_img, (FLAGS.img_height, FLAGS.img_width),
+        #                                 order=0, preserve_range=True)
       depth_img = np.round(np.array(depth_img) / 256.0).astype(np.uint8)
       #depth_sum += depth_img
       #print((depth_sum / img_cnt).mean((0,1)))
@@ -164,15 +171,15 @@ def prepare_dataset(name):
       #print(gt_path)
       #full_gt_img = ski.data.load(gt_path)
       full_gt_img = pimg.open(gt_path)
-      full_gt_img = full_gt_img.crop((cx_start,cy_start,cx_end,cy_end))
-      #full_gt_img = np.ascontiguousarray(full_gt_img[cy_start:cy_end,cx_start:cx_end])
-      if FLAGS.downsample:
+      if not FLAGS.fullres:
+        full_gt_img = full_gt_img.crop((cx_start,cy_start,cx_end,cy_end))
+        full_gt_img = full_gt_img.resize((width,height), pimg.NEAREST)
+        #full_gt_img = np.ascontiguousarray(full_gt_img[cy_start:cy_end,cx_start:cx_end])
         #full_gt_img = ski.transform.resize(full_gt_img, (FLAGS.img_height, FLAGS.img_width),
         #                                   order=0, preserve_range=True).astype(np.uint8)
-        full_gt_img = full_gt_img.resize((width,height), pimg.NEAREST)
       full_gt_img = np.array(full_gt_img).astype(np.uint8)
       has_hood = True
-      if cy_end < orig_height:
+      if not FLAGS.fullres and cy_end < orig_height:
         has_hood = False
       gt_img, car_mask = data_utils.convert_ids(full_gt_img, has_hood)
       #rgb[car_mask] = 0

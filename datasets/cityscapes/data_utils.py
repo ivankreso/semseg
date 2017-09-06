@@ -2,9 +2,9 @@ import numpy as np
 from cityscapes import CityscapesDataset
 
 
-def convert_ids(img, has_hood=True):
+def convert_ids(img, has_hood=True, ignore_id=255):
   img_train = np.zeros_like(img)
-  img_train.fill(255)
+  img_train.fill(ignore_id)
   car_mask = img == 1
   height = car_mask.shape[0]
   if has_hood:

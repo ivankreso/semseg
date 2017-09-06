@@ -3,6 +3,7 @@ from os.path import join
 import sys
 import time
 from shutil import copyfile
+from tqdm import trange
 
 import numpy as np
 import tensorflow as tf
@@ -29,39 +30,69 @@ def train(model):
   #config.operation_timeout_in_ms = 5000   # terminate on long hangs
   #sess = tf.Session(config=config)
   with tf.Session(config=config) as sess:
-    tf.set_random_seed(FLAGS.seed)
-    np.random.seed(FLAGS.seed)
-    # Create a variable to count the number of train() calls. This equals the
-    # number of batches processed * FLAGS.num_gpus.
-    global_step = tf.get_variable('global_step', [],
-                                  initializer=tf.constant_initializer(0),
-                                  trainable=False)
+    if FLAGS.seed >= 0:
+      tf.set_random_seed(FLAGS.seed)
+      np.random.seed(FLAGS.seed)
+
+    ## Start the queue runners.
+    #net = model.build_test()
+    #coord = tf.train.Coordinator()
+    #threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+    #sess.run(tf.global_variables_initializer())
+    #for i in trange(1000):
+    #  sess.run(net)
 
     # Build a Graph that computes the logits predictions from the inference model.
     train_ops, init_op, init_feed = model.build('train')
     num_params = train_helper.get_num_params()
+    vars_to_restore = tf.contrib.framework.get_variables_to_restore()
     if FLAGS.no_valid is False:
       valid_ops = model.build('validation')
     loss = train_ops[0]
 
+    #tf.contrib.tfprof.model_analyzer.print_model_analysis(
+    #    tf.get_default_graph(),
+    #    tfprof_options=tf.contrib.tfprof.model_analyzer.FLOAT_OPS_OPTIONS)
+
     num_batches = model.num_batches()
+    global_step = tf.get_variable('global_step', [],
+                                  initializer=tf.constant_initializer(0),
+                                  trainable=False)
+    # TODO
     train_op = model.minimize(loss, global_step, num_batches)
+    #update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    #with tf.control_dependencies(update_ops):
+    #  train_op = model.minimize(loss, global_step, num_batches)
 
     print('\nNumber of parameters = ', num_params)
     # Create a saver.
     saver = tf.train.Saver(tf.global_variables(), max_to_keep=FLAGS.max_num_epochs)
 
-    sess.run(tf.global_variables_initializer())
-    sess.run(tf.local_variables_initializer())
-    if init_op != None:
-      print('\nInitializing pretrained weights...')
-      sess.run(init_op, feed_dict=init_feed)
+    #sess.run(tf.global_variables_initializer())
+    #sess.run(tf.local_variables_initializer())
+    #if init_op != None:
+    #  print('\nInitializing pretrained weights...')
+    #  sess.run(init_op, feed_dict=init_feed)
 
+    #if len(FLAGS.resume_path) > 0:
+    #  print('\nResuming training from:', FLAGS.resume_path)
+    #  assert tf.gfile.Exists(FLAGS.resume_path)
+    #  resnet_restore = tf.train.Saver(model.variables_to_restore())
+    #  resnet_restore.restore(sess, FLAGS.resume_path)
+
+    sess.run(tf.global_variables_initializer())
     if len(FLAGS.resume_path) > 0:
-      print('\nResuming training from:', FLAGS.resume_path)
-      assert tf.gfile.Exists(FLAGS.resume_path)
-      resnet_restore = tf.train.Saver(model.variables_to_restore())
+      print(f'\nRestoring params from: {FLAGS.resume_path}\n')
+      #print(tf.train.latest_checkpoint(FLAGS.resume_path))
+      #assert tf.gfile.Exists(FLAGS.resume_path)
+      resnet_restore = tf.train.Saver(vars_to_restore)
       resnet_restore.restore(sess, FLAGS.resume_path)
+    elif init_op != None:
+      print('\nInitializing from pretrained weights...')
+      sess.run(init_op, feed_dict=init_feed)
+    else:
+      print('All params are using random init')
+    sess.run(tf.local_variables_initializer())
 
     # Build the summary operation based on the TF collection of Summaries.
     #summary_op = tf.merge_all_summaries()
@@ -89,10 +120,11 @@ def train(model):
       print('tensorboard --logdir=' + FLAGS.train_dir + '\n')
       #num_batches = model.num_batches() // FLAGS.num_validations_per_epoch
       model.start_epoch(train_data)
-      #for step in range(30):
+      #for step in range(0):
+      duration = 0
       for step in range(num_batches):
-        if iter_num >= FLAGS.num_iters:
-          break
+        #if iter_num >= FLAGS.num_iters:
+        #  break
         iter_num += 1
         start_time = time.time()
         run_ops = train_ops + [train_op, global_step]
@@ -120,7 +152,7 @@ def train(model):
           #  trace_file = open('timeline.ctf.json', 'w')
           #  trace_file.write(trace.generate_chrome_trace_format())
           #  raise 1
-        duration = time.time() - start_time
+        duration += time.time() - start_time
 
         assert not np.isnan(loss_val), 'Model diverged with loss = NaN'
         # estimate training accuracy on the last 40% of the epoch
@@ -129,20 +161,20 @@ def train(model):
 
         #img_prefix = img_prefix[0].decode("utf-8")
 
-        #if FLAGS.draw_predictions and step % 50 == 0:
+        #if FLAGS.draw_predictions and step % 50 == 0:// Controls the font size in pixels
         #  model.draw_prediction('train', epoch_num, step, ret_val)
 
         if step % 20 == 0:
         #if step % 1 == 0:
-          examples_per_sec = FLAGS.batch_size / duration
-          sec_per_batch = float(duration)
+          examples_per_sec = (step+1)*FLAGS.batch_size / duration
+          #sec_per_batch = float(duration)
 
           format_str = '%s: epoch %03d, step %04d / %04d, iter %06d / %06d, loss = %.2f \
-            (%.1f examples/sec; %.3f sec/batch)'
+            (%.1f examples/sec)'
           #print('lr = ', clr)
           print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num,
-                              step, model.num_batches(), iter_num, FLAGS.num_iters, loss_val,
-                              examples_per_sec, sec_per_batch))
+                              step, model.num_batches(), iter_num, FLAGS.num_iters,
+                              loss_val, examples_per_sec))
       is_best = model.end_epoch(train_data)
       #train_helper.print_variable_diff(sess, init_vars)
       if FLAGS.no_valid is False:
@@ -160,8 +192,8 @@ def train(model):
         saver.save(sess, checkpoint_path)
       elif not FLAGS.save_net:
         print('WARNING: not saving...')
-      if iter_num >= FLAGS.num_iters:
-        break
+      #if iter_num >= FLAGS.num_iters:
+      #  break
 
     coord.request_stop()
     coord.join(threads)

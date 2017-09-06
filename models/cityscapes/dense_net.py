@@ -2,13 +2,13 @@ import os, re
 import pickle
 import tensorflow as tf
 import numpy as np
-import cv2
+#import cv2
 from os.path import join
 
 import tensorflow.contrib.layers as layers
 from tensorflow.contrib.framework import arg_scope
-import skimage as ski
-import skimage.io
+#import skimage as ski
+#import skimage.io
 
 import libs.cylib as cylib
 import train_helper
@@ -25,6 +25,9 @@ dataset_dir = os.path.join('/home/kivan/datasets/Cityscapes/tensorflow/',
 #tf.app.flags.DEFINE_string('dataset_dir', DATASET_DIR, '')
 print('Dataset dir: ' + dataset_dir)
 
+gpu0 = '/gpu:0'
+gpu1 = '/gpu:0'
+
 # RGB
 data_mean =  [75.2051479, 85.01498926, 75.08929598]
 data_std =  [46.89434904, 47.63335775, 46.47197535]
@@ -40,16 +43,20 @@ else:
 
 print('Num training examples = ', train_dataset.num_examples())
 
+bottleneck = True
 model_depth = 121
 block_sizes = [6,12,24,16]
 #model_depth = 169
 #block_sizes = [6,12,32,32]
 
+#block_sizes = [4,6,12,8]
+#bottleneck = False
+
 imagenet_init = True
 #imagenet_init = False
 init_dir = '/home/kivan/datasets/pretrained/dense_net/'
-apply_jitter = True
-#apply_jitter = False
+#apply_jitter = True
+apply_jitter = False
 jitter_scale = False
 #jitter_scale = True
 pool_func = layers.avg_pool2d
@@ -70,20 +77,23 @@ compression = 0.5
 growth_up = 32
 
 use_dropout = False
-keep_prob = 0.8
+#use_dropout = True # 2% worse
+#keep_prob = 0.8
+#use_dropout = True
+#keep_prob = 0.9
 
-# must be false if BN is frozen
-fused_batch_norm = True
-#fused_batch_norm = False
+data_format = 'NCHW'
+maps_dim = 1
+height_dim = 2
 
-#data_format = 'NCHW'
-#maps_dim = 1
-#height_dim = 2
+#data_format = 'NHWC'
+#maps_dim = 3
+#height_dim = 1
 
-data_format = 'NHWC'
-maps_dim = 3
-height_dim = 1
-
+up_sizes = [128,128,128,128,128]
+#up_sizes = [128,128,256,256]
+#up_sizes = [128,128,256,256]
+#up_sizes = [256,256,256,256]
 
 bn_params = {
   # Decay for the moving averages.
@@ -94,83 +104,15 @@ bn_params = {
   'epsilon': 1e-5,
   # None to force the updates
   'updates_collections': None,
-  'fused': fused_batch_norm,
+  # fused must be false if BN is frozen
+  'fused': True,
   'data_format': data_format,
   'is_training': True
 }
 
-
-def evaluate(name, sess, epoch_num, run_ops, data):
-  loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation_voc2012(
-      sess, epoch_num, run_ops, valid_dataset)
-  is_best = False
-  if iou > data['best_iou'][0]:
-    is_best = True
-    data['best_iou'] = [iou, epoch_num]
-  data['iou'] += [iou]
-  data['acc'] += [accuracy]
-  data['loss'] += [loss_val]
-  return is_best
-
-
-def start_epoch(train_data):
-  global train_loss_arr, train_conf_mat
-  train_conf_mat = np.ascontiguousarray(
-      np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64))
-  train_loss_arr = []
-  train_data['lr'].append(lr.eval())
-
-
-def end_epoch(train_data):
-  pixacc, iou, _, _, _ = eval_helper.compute_errors(
-      train_conf_mat, 'Train', train_dataset.class_info)
-  is_best = False
-  if len(train_data['iou']) > 0 and iou > max(train_data['iou']):
-    is_best = True
-  train_data['iou'].append(iou)
-  train_data['acc'].append(pixacc)
-  train_loss_val = np.mean(train_loss_arr)
-  train_data['loss'].append(train_loss_val)
-  return is_best
-
-
-def update_stats(ret_val):
-  global train_loss_arr
-  loss_val = ret_val[0]
-  yp = ret_val[1]
-  yt = ret_val[2]
-  train_loss_arr.append(loss_val)
-  yp = yp.argmax(3).astype(np.int32)
-  cylib.collect_confusion_matrix(yp.reshape(-1), yt.reshape(-1), train_conf_mat)
-
-
-def plot_results(train_data, valid_data):
-  eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'),
-                                     train_data, valid_data)
-
-
-def print_results(train_data, valid_data):
-  print('\nBest train IOU = %.2f' % max(train_data['iou']))
-  print('Best validation IOU = %.2f (epoch %d)\n' % tuple(valid_data['best_iou']))
-
-
-def init_eval_data():
-  train_data = {}
-  valid_data = {}
-  train_data['lr'] = []
-  train_data['loss'] = []
-  train_data['iou'] = []
-  train_data['acc'] = []
-  train_data['best_iou'] = [0, 0]
-  valid_data['best_iou'] = [0, 0]
-  valid_data['loss'] = []
-  valid_data['iou'] = []
-  valid_data['acc'] = []
-  return train_data, valid_data
-
-
 def normalize_input(img):
-  with tf.name_scope('input'), tf.device('/cpu:0'):
+  with tf.name_scope('input'), tf.device('/gpu:0'):
+  #with tf.name_scope('input'):
     if data_format == 'NCHW':
       img = tf.transpose(img, perm=[0,3,1,2])
       mean = tf.constant(data_mean, dtype=tf.float32, shape=[1,3,1,1])
@@ -180,6 +122,181 @@ def normalize_input(img):
       std = data_std
     img = (img - mean) / std
     return img
+
+def _build(image, is_training=False):
+  #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
+  bn_params['is_training'] = is_training
+  #bn_params['is_training'] = False
+  #bn_params['trainable'] = False
+
+  with arg_scope([layers.conv2d],
+      data_format=data_format, stride=1, padding='SAME', activation_fn=None,
+      normalizer_fn=None, normalizer_params=None,
+      weights_initializer=init_func, biases_initializer=None,
+      weights_regularizer=layers.l2_regularizer(weight_decay)):
+    with tf.variable_scope('conv0'):
+      net = layers.conv2d(image, 2*growth, 7, stride=2)
+      #net = layers.conv2d(image, 2*growth, 7, stride=1)
+      net = tf.contrib.layers.batch_norm(net, **bn_params)
+      net = tf.nn.relu(net)
+
+    net = layers.max_pool2d(net, 2, stride=2, padding='SAME',
+                            data_format=data_format, scope='pool0')
+
+    skip_layers = []
+
+    # no diff with double BN from orig densenet, first=True
+    #net = dense_block(net, block_sizes[0], growth, 'block0', is_training, first=True)
+    net = dense_block(net, block_sizes[0], growth, 'block0', is_training)
+    #net, skip = dense_block(net, block_sizes[0], growth, 'block0', is_training,
+    #    first=True, split=True)
+    #skip_layers.append([skip, 256, growth_up, 'block0_mid_refine', depth])
+    #skip_layers.append([skip, up_sizes[0], growth_up, 'block0_mid_refine'])
+    skip_layers.append([net, up_sizes[0], growth_up, 'block0_refine'])
+    net, _ = transition(net, compression, 'block0/transition')
+    #skip_layers.append([skip, up_sizes[0], growth_up, 'block0_refine'])
+
+    #net, skip = dense_block(net, block_sizes[1], growth, 'block1', is_training, split=True)
+    #skip_layers.append([skip, up_sizes[1], growth_up, 'block1_mid_refine'])
+    net = dense_block(net, block_sizes[1], growth, 'block1', is_training)
+
+    skip_layers.append([net, up_sizes[1], growth_up, 'block1_refine'])
+    net, _ = transition(net, compression, 'block1/transition')
+
+    #context_pool_num = 3
+    #net, skip = dense_block(net, block_sizes[2], growth, 'block2', is_training, split=True)
+    #skip_layers.append([skip, up_sizes[2], growth_up, 'block2_mid_refine'])
+    #skip_layers.append([net, up_sizes[3], growth_up, 'block2_refine'])
+    net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
+    skip_layers.append([net, up_sizes[2], growth_up, 'block2_refine'])
+
+    net, _ = transition(net, compression, 'block2/transition')
+
+    #bsz = 2
+    #net, _ = transition(net, compression, 'block1/transition', stride=1)
+    #paddings, crops = tf.required_space_to_batch_paddings(image_size(net), [bsz, bsz])
+    #net = tf.space_to_batch(net, paddings=paddings, block_size=bsz)
+    #net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
+    #net, _ = transition(net, compression, 'block2/transition', stride=1)
+    #net = tf.batch_to_space(net, crops=crops, block_size=bsz)
+
+    #bsz = 2
+    #bsz = 4
+    #paddings, crops = tf.required_space_to_batch_paddings(image_size(net), [bsz, bsz])
+    #net = tf.space_to_batch(net, paddings=paddings, block_size=bsz)
+    net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
+    #net = tf.batch_to_space(net, crops=crops, block_size=bsz)
+    #net, skip = dense_block(net, block_sizes[3], growth, 'block3', is_training, split=True)
+    #skip_layers.append([skip, up_sizes[-1], growth_up, 'block3_refine'])
+    #skip = tf.batch_to_space(skip, crops=crops, block_size=bsz)
+
+    #net, skip = dense_block(net, block_sizes[3], growth, 'block3', is_training,
+    #                        split=True, rate=2)
+
+    
+    with tf.variable_scope('head'):
+      print('out = ', net)
+      #skip_layers.append([net, up_sizes[-1], growth_up, 'block3_refine'])
+      #net, _ = transition(net, compression, 'block3/transition')
+      #net = dense_block(net, block_sizes[3], growth, 'block4', is_training)
+      net = BNReluConv(net, 512, 'bottleneck', k=1)
+      ## 0.4 better with rate=2
+      #net = BNReluConv(net, 128, 'context', k=3, rate=2)
+      net = BNReluConv(net, 128, 'context', k=3)
+      #net = BNReluConv(net, up_sizes[-1], 'context', k=3)
+      #net = dense_block(net, 8, growth, 'block4', is_training)
+      #net = BNReluConv(net, 256, 'bottleneck2', k=1)
+      #net = dense_block_context(net)
+      print(net)
+
+      #net = BNReluConv(net, 256, 'bottleneck', k=1)
+      ##net = _pyramid_pooling(net, 256, num_pools=4)
+      #net = _pyramid_pooling(net, 256, num_pools=3)
+      ## SPP has dropout here
+      #if is_training:
+      #  net = tf.nn.dropout(net, keep_prob=0.9)
+
+      #skip_layers.append([net, up_sizes[-1], growth_up, 'block3_refine'])
+      #net, _ = transition(net, compression, 'block3/transition')
+      #net, _ = transition(net, compression, 'block3/transition', stride)
+      ####bsz = 4
+      #bsz = 2
+      #paddings, crops = tf.required_space_to_batch_paddings(image_size(net), [bsz, bsz])
+      #net = tf.space_to_batch(net, paddings=paddings, block_size=bsz)
+      #net = dense_block(net, block_sizes[3], growth, 'block4', is_training)
+      ##print(net)
+      ##net = BNReluConv(net, 256, 'bottleneck', k=1)
+      ###net = BNReluConv(net, 128, 'bottleneck', k=1)
+      #net = BNReluConv(net, 256, 'context', k=3, rate=2)
+      #net = BNReluConv(net, 256, 'context', k=3, rate=2)
+      #net = BNReluConv(net, 128, 'context', k=3)
+      #net = tf.batch_to_space(net, crops=crops, block_size=bsz)
+
+      #net = dense_block_context(net)
+      #net = BNReluConv(net, context_size, 'context_conv', k=3)
+      #context_pool_num = 4
+
+      #print('dense context')
+      #print('7x7')
+      #net = BNReluConv(net, context_size, 'context_conv', k=7)
+      #net = BNReluConv(net, context_size, 'context_conv', k=7, rate=2)
+      #net = BNReluConv(net, context_size, 'context_conv', k=3, rate=2)
+      #in_shape = net.get_shape().as_list()
+      #in_shape[maps_dim] = context_size
+      #net.set_shape(in_shape)
+      #net = BNReluConv(net, context_size, 'context_conv', k=5)
+      #final_h = net.get_shape().as_list()[height_dim]
+      print('Before upsampling: ', net)
+
+      all_logits = [net]
+      for skip_layer in reversed(skip_layers):
+        net = refine(net, skip_layer, is_training)
+        all_logits.append(net)
+        print('after upsampling = ', net)
+      all_logits = [all_logits[0], all_logits[-1]]
+      
+
+  # TODO
+  all_logits = [net]
+  with tf.variable_scope('head'):
+    for i, logits in enumerate(all_logits):
+      with tf.variable_scope('logits_'+str(i)):
+      # FIX
+      #net = tf.nn.relu(layers.batch_norm(net, **bn_params))
+      #logits = layers.conv2d(net, FLAGS.num_classes, 1, activation_fn=None,
+      #                       data_format=data_format)
+        logits = layers.conv2d(tf.nn.relu(logits), FLAGS.num_classes, 1,
+                               activation_fn=None, data_format=data_format)
+
+        if data_format == 'NCHW':
+          logits = tf.transpose(logits, perm=[0,2,3,1])
+        input_shape = tf.shape(image)[height_dim:height_dim+2]
+        logits = tf.image.resize_bilinear(logits, input_shape, name='resize_logits')
+        all_logits[i] = logits
+    logits = all_logits.pop()
+    return logits, all_logits
+
+    #with tf.variable_scope('logits'):
+    #  #net = tf.nn.relu(layers.batch_norm(net, **bn_params))
+    #  net = tf.nn.relu(net)
+    #  logits = layers.conv2d(net, FLAGS.num_classes, 1, activation_fn=None,
+    #                         data_format=data_format)
+
+    #with tf.variable_scope('mid_logits'):
+    #  #mid_logits = tf.nn.relu(layers.batch_norm(mid_logits, **bn_params))
+    #  mid_logits = tf.nn.relu(mid_logits)
+    #  mid_logits = layers.conv2d(mid_logits, FLAGS.num_classes, 1, activation_fn=None,
+    #                             data_format=data_format)
+
+    #if data_format == 'NCHW':
+    #  logits = tf.transpose(logits, perm=[0,2,3,1])
+    #  mid_logits = tf.transpose(mid_logits, perm=[0,2,3,1])
+    #input_shape = tf.shape(image)[height_dim:height_dim+2]
+    #logits = tf.image.resize_bilinear(logits, input_shape, name='resize_logits')
+    #mid_logits = tf.image.resize_bilinear(mid_logits, input_shape, name='resize_mid_logits')
+    ##if data_format == 'NCHW':
+    ##  top_layer = tf.transpose(top_layer, perm=[0,3,1,2])
+    #return logits, mid_logits
 
 
 def resize_tensor(net, shape, name):
@@ -191,7 +308,7 @@ def resize_tensor(net, shape, name):
   return net
 
 
-def refine(net, skip_data):
+def refine(net, skip_data, is_training):
   skip_net = skip_data[0]
   num_layers = skip_data[1]
   growth = skip_data[2]
@@ -222,7 +339,7 @@ def refine(net, skip_data):
     print('\nup = ', net)
     print('skip = ', skip_net)
     #print(skip_data)
-    return dense_block_upsample(net, skip_net, num_layers, growth, 'dense_block')
+    return upsample(net, skip_net, num_layers, growth, is_training, 'dense_block')
 
 
 def BNReluConv(net, num_filters, name, k=3, rate=1, first=False, concat=None):
@@ -246,7 +363,7 @@ def BNReluConv(net, num_filters, name, k=3, rate=1, first=False, concat=None):
     return net
 
 
-def _pyramid_pooling(net, size=3):
+def _pyramid_pooling(net, size, num_pools=3):
   print('Pyramid context pooling')
   with tf.variable_scope('pyramid_context_pooling'):
     if known_shape:
@@ -258,9 +375,9 @@ def _pyramid_pooling(net, size=3):
     shape_info = net.get_shape().as_list()
     num_maps = net.get_shape().as_list()[maps_dim]
     #grid_size = [6, 3, 2, 1]
-    pool_dim = int(round(num_maps / size))
+    pool_dim = int(round(num_maps / num_pools))
     concat_lst = [net]
-    for i in range(size):
+    for i in range(num_pools):
       #pool = layers.avg_pool2d(net, kernel_size=[kh, kw], stride=[kh, kw], padding='SAME')
       #pool = layers.avg_pool2d(net, kernel_size=[kh, kh], stride=[kh, kh], padding='SAME')
       print('before pool = ', net)
@@ -273,7 +390,7 @@ def _pyramid_pooling(net, size=3):
     net = tf.concat(concat_lst, maps_dim)
     print('Pyramid pooling out: ', net)
     #net = BNReluConv(net, 512, k=3, name='bottleneck_out')
-    net = BNReluConv(net, 256, k=3, name='bottleneck_out')
+    net = BNReluConv(net, size, k=3, name='bottleneck_out')
     return net
 
 
@@ -281,13 +398,13 @@ def layer(net, num_filters, name, is_training, first):
   with tf.variable_scope(name):
     net = BNReluConv(net, 4*num_filters, 'bottleneck', k=1, first=first)
     net = BNReluConv(net, num_filters, 'conv', k=3)
-    #if use_dropout and is_training: 
-    #  net = tf.nn.dropout(net, keep_prob=keep_prob)
+    if use_dropout and is_training: 
+      net = tf.nn.dropout(net, keep_prob=keep_prob)
   return net
 
 
-def dense_block(net, size, growth, name, is_training=False, first=False, split=False,
-    rate=1):
+def dense_block(net, size, growth, name, is_training=False, first=False,
+                split=False, rate=1):
   with tf.variable_scope(name):
     for i in range(size):
       x = net
@@ -319,7 +436,9 @@ def dense_block_multigpu(net, size, growth, name, is_training=False, first=False
       #if i < 6:
       #if i < 3:
 
-      if i < 12:
+      #if i < 12:
+      #if i < 16:
+      if i < 20:
         gpu = '/gpu:0'
       else:
         gpu = '/gpu:1'
@@ -406,14 +525,16 @@ def dense_block_upsample_worse(net, skip_net, size, growth, name):
 #up_sizes = [128,128,256,256]
 #up_sizes = [128,196,256,384]
 #up_sizes = [128,196,256,384,512]
-up_sizes = [128,128,128,128,128] #72
 #up_sizes = [64,128,128,128,256]
 #up_sizes = [64,64,64,64,64]
 
 #up_sizes = [256,256,512,512] # good
 #up_sizes = [128,256,384,512] # 0.5% worse then up
 #up_sizes = [32,64,128,256]
-def dense_block_upsample(net, skip_net, size, growth, name):
+
+#up_sizes = [128,128,256,256,256]
+
+def upsample(net, skip_net, size, growth, is_training, name):
   with tf.variable_scope(name):
     # TODO
     num_filters = net.get_shape().as_list()[maps_dim]
@@ -425,14 +546,26 @@ def dense_block_upsample(net, skip_net, size, growth, name):
     net = BNReluConv(net, size, 'layer')
   return net
 
+# works the same as simple
+def upsample_dense(net, skip_net, size, growth, is_training, name):
+  with tf.variable_scope(name):
+    num_filters = net.get_shape().as_list()[maps_dim]
+    skip_net = BNReluConv(skip_net, num_filters, 'skip_bottleneck', k=1)
+    net = tf.concat([net, skip_net], maps_dim)
+    net = dense_block(net, 4, growth, 'dense_block', is_training)
+    #net = BNReluConv(net, num_filters, 'bottleneck', k=3)
+    print('after dense block = ', net)
+    net = BNReluConv(net, size, 'bottleneck', k=1)
+  return net
 
 def transition(net, compression, name, stride=2, pool=True):
   with tf.variable_scope(name):
-    net = tf.contrib.layers.batch_norm(net, **bn_params)
-    net = tf.nn.relu(net)
-    num_filters = net.get_shape().as_list()[maps_dim]
-    num_filters = int(round(num_filters*compression))
-    net = layers.conv2d(net, num_filters, kernel_size=1)
+    if bottleneck:
+      net = tf.contrib.layers.batch_norm(net, **bn_params)
+      net = tf.nn.relu(net)
+      num_filters = net.get_shape().as_list()[maps_dim]
+      num_filters = int(round(num_filters*compression))
+      net = layers.conv2d(net, num_filters, kernel_size=1)
     skip_layer = net
     # avg works little better on small res
     if pool:
@@ -450,8 +583,8 @@ def dense_block_context(net):
     #size = 6
     for i in range(size):
       x = net
-      net = BNReluConv(net, 64, 'layer'+str(i))
-      #net = BNReluConv(net, 128, 'layer'+str(i))
+      net = BNReluConv(net, growth, 'layer'+str(i))
+      #net = BNReluConv(net, 64, 'layer'+str(i))
       outputs.append(net)
       if i < size - 1:
         net = tf.concat([x, net], maps_dim)
@@ -459,9 +592,14 @@ def dense_block_context(net):
   return net
 
 
-def _build(image, is_training=False):
+
+
+def _build_test111(image, is_training=False):
   #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
   bn_params['is_training'] = is_training
+  #bn_params['is_training'] = False
+  #bn_params['trainable'] = False
+
   with arg_scope([layers.conv2d],
       data_format=data_format, stride=1, padding='SAME', activation_fn=None,
       normalizer_fn=None, normalizer_params=None,
@@ -492,123 +630,36 @@ def _build(image, is_training=False):
     #net, skip = dense_block(net, block_sizes[1], growth, 'block1', is_training, split=True)
     #skip_layers.append([skip, up_sizes[1], growth_up, 'block1_mid_refine'])
     net = dense_block(net, block_sizes[1], growth, 'block1', is_training)
+
     skip_layers.append([net, up_sizes[1], growth_up, 'block1_refine'])
     net, _ = transition(net, compression, 'block1/transition')
-    #skip_layers.append([skip, up_sizes[1], growth_up, 'block1_refine'])
 
-    # works the same with split, not 100%
     #context_pool_num = 3
     #net, skip = dense_block(net, block_sizes[2], growth, 'block2', is_training, split=True)
     #skip_layers.append([skip, up_sizes[2], growth_up, 'block2_mid_refine'])
-    net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
     #skip_layers.append([net, up_sizes[3], growth_up, 'block2_refine'])
-
+    net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
     skip_layers.append([net, up_sizes[2], growth_up, 'block2_refine'])
+
     net, _ = transition(net, compression, 'block2/transition')
-    #net, _ = transition(net, compression, 'block2/transition', stride=1)
 
     #bsz = 2
+    #net, _ = transition(net, compression, 'block1/transition', stride=1)
     #paddings, crops = tf.required_space_to_batch_paddings(image_size(net), [bsz, bsz])
     #net = tf.space_to_batch(net, paddings=paddings, block_size=bsz)
-    #net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
+    #net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
+    #net, _ = transition(net, compression, 'block2/transition', stride=1)
     #net = tf.batch_to_space(net, crops=crops, block_size=bsz)
-    #net, skip = dense_block(net, block_sizes[3], growth, 'block3', is_training, split=True)
-    #skip_layers.append([skip, up_sizes[-1], growth_up, 'block3_refine'])
 
-    net, skip = dense_block(net, block_sizes[3], growth, 'block3', is_training, split=True, rate=2)
-    #skip = tf.batch_to_space(skip, crops=crops, block_size=bsz)
+    #bsz = 2
+    #bsz = 4
+    #paddings, crops = tf.required_space_to_batch_paddings(image_size(net), [bsz, bsz])
+    #net = tf.space_to_batch(net, paddings=paddings, block_size=bsz)
+    net = dense_block(net, block_sizes[3], growth, 'block3', is_training)
+    #net = tf.batch_to_space(net, crops=crops, block_size=bsz)
+    return net
 
-    with tf.variable_scope('head'):
-      #skip_layers.append([net, up_sizes[-1], growth_up, 'block3_refine'])
-      #net, _ = transition(net, compression, 'block3/transition')
-      #net, _ = transition(net, compression, 'block3/transition', stride=1)
-      ####bsz = 4
-      #bsz = 2
-      #paddings, crops = tf.required_space_to_batch_paddings(image_size(net), [bsz, bsz])
-      #net = tf.space_to_batch(net, paddings=paddings, block_size=bsz)
-      #net = dense_block(net, block_sizes[3], growth, 'block4', is_training)
-      ##print(net)
-      ##net = BNReluConv(net, 256, 'bottleneck', k=1)
-      ###net = BNReluConv(net, 128, 'bottleneck', k=1)
-      print('out = ', net)
-      net = BNReluConv(net, 512, 'bottleneck', k=1)
-      #net = BNReluConv(net, 128, 'context', k=3, rate=2)
-      net = BNReluConv(net, 256, 'context', k=3, rate=2)
-      #net = tf.batch_to_space(net, crops=crops, block_size=bsz)
-
-      #net = dense_block_context(net)
-      #net = BNReluConv(net, context_size, 'context_conv', k=3)
-      #context_pool_num = 4
-      #net = BNReluConv(net, 256, 'bottleneck', k=1)
-      #net = _pyramid_pooling(net, size=context_pool_num)
-      # SPP has dropout here
-      #if is_training:
-      #  net = tf.nn.dropout(net, keep_prob=0.9)
-
-      #print('dense context')
-      #print('7x7')
-      #net = BNReluConv(net, context_size, 'context_conv', k=7)
-      #net = BNReluConv(net, context_size, 'context_conv', k=7, rate=2)
-      #net = BNReluConv(net, context_size, 'context_conv', k=3, rate=2)
-      #in_shape = net.get_shape().as_list()
-      #in_shape[maps_dim] = context_size
-      #net.set_shape(in_shape)
-      #net = BNReluConv(net, context_size, 'context_conv', k=5)
-      #final_h = net.get_shape().as_list()[height_dim]
-      print('Before upsampling: ', net)
-
-      all_logits = [net]
-      for skip_layer in reversed(skip_layers):
-        net = refine(net, skip_layer)
-        all_logits.append(net)
-        print('after upsampling = ', net)
-
-      all_logits = [all_logits[0], all_logits[-1]]
-      #all_logits = [all_logits[1], all_logits[-1]]
-      #all_logits = [all_logits[2], all_logits[-1]]
-
-  with tf.variable_scope('head'):
-    for i, logits in enumerate(all_logits):
-      with tf.variable_scope('logits_'+str(i)):
-      # FIX
-      #net = tf.nn.relu(layers.batch_norm(net, **bn_params))
-      #logits = layers.conv2d(net, FLAGS.num_classes, 1, activation_fn=None,
-      #                       data_format=data_format)
-        logits = layers.conv2d(tf.nn.relu(logits), FLAGS.num_classes, 1,
-                               activation_fn=None, data_format=data_format)
-
-        if data_format == 'NCHW':
-          logits = tf.transpose(logits, perm=[0,2,3,1])
-        input_shape = tf.shape(image)[height_dim:height_dim+2]
-        logits = tf.image.resize_bilinear(logits, input_shape, name='resize_logits')
-        all_logits[i] = logits
-    logits = all_logits.pop()
-    return logits, all_logits
-
-    #with tf.variable_scope('logits'):
-    #  #net = tf.nn.relu(layers.batch_norm(net, **bn_params))
-    #  net = tf.nn.relu(net)
-    #  logits = layers.conv2d(net, FLAGS.num_classes, 1, activation_fn=None,
-    #                         data_format=data_format)
-
-    #with tf.variable_scope('mid_logits'):
-    #  #mid_logits = tf.nn.relu(layers.batch_norm(mid_logits, **bn_params))
-    #  mid_logits = tf.nn.relu(mid_logits)
-    #  mid_logits = layers.conv2d(mid_logits, FLAGS.num_classes, 1, activation_fn=None,
-    #                             data_format=data_format)
-
-    #if data_format == 'NCHW':
-    #  logits = tf.transpose(logits, perm=[0,2,3,1])
-    #  mid_logits = tf.transpose(mid_logits, perm=[0,2,3,1])
-    #input_shape = tf.shape(image)[height_dim:height_dim+2]
-    #logits = tf.image.resize_bilinear(logits, input_shape, name='resize_logits')
-    #mid_logits = tf.image.resize_bilinear(mid_logits, input_shape, name='resize_mid_logits')
-    ##if data_format == 'NCHW':
-    ##  top_layer = tf.transpose(top_layer, perm=[0,3,1,2])
-    #return logits, mid_logits
-
-
-def _build_2gpus(image, is_training=False):
+def _build2gpu(image, is_training=False):
   #image = tf.Print(image, [tf.shape(image)], message='img_shape = ', summarize=10)
   bn_params['is_training'] = is_training
   with arg_scope([layers.conv2d],
@@ -632,7 +683,8 @@ def _build_2gpus(image, is_training=False):
       skip_layers = []
 
       # no diff with double BN from orig densenet, first=True
-      net = dense_block(net, block_sizes[0], growth, 'block0', is_training, first=True)
+      net = dense_block(net, block_sizes[0], growth, 'block0', is_training)
+      #net = dense_block(net, block_sizes[0], growth, 'block0', is_training, first=True)
       #net, skip = dense_block(net, block_sizes[0], growth, 'block0', is_training,
       #    first=True, split=True)
       #skip_layers.append([skip, 256, growth_up, 'block0_mid_refine', depth])
@@ -650,11 +702,12 @@ def _build_2gpus(image, is_training=False):
       #skip_layers.append([skip, up_sizes[1], growth_up, 'block1_refine'])
 
       # works the same with split, not 100%
-      #context_pool_num = 3
       net, skip = dense_block(net, block_sizes[2], growth, 'block2', is_training, split=True)
       skip_layers.append([skip, up_sizes[2], growth_up, 'block2_mid_refine'])
-      context_pool_num = 4
+      #context_pool_num = 4
+      #net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
     with tf.device(gpu2):
+      #net = dense_block_multigpu(net, block_sizes[2], growth, 'block2', is_training)
       #net = dense_block(net, block_sizes[2], growth, 'block2', is_training)
       skip_layers.append([net, up_sizes[3], growth_up, 'block2_refine'])
       #skip_layers.append([net, up_sizes[2], growth_up, 'block2_refine'])
@@ -666,7 +719,9 @@ def _build_2gpus(image, is_training=False):
       skip_layers.append([skip, up_sizes[-1], growth_up, 'block3_refine'])
 
       with tf.variable_scope('head'):
+        #net = BNReluConv(net, 512, 'bottleneck', k=1)
         net = BNReluConv(net, 512, 'bottleneck', k=1)
+        net = BNReluConv(net, 128, 'context', k=3, rate=2)
         #net = BNReluConv(net, 128, 'bottleneck', k=1)
         #net = dense_block_context(net)
         #net = _pyramid_pooling(net, size=context_pool_num)
@@ -689,7 +744,7 @@ def _build_2gpus(image, is_training=False):
 
         all_logits = [net]
         for skip_layer in reversed(skip_layers):
-          net = refine(net, skip_layer)
+          net = refine(net, skip_layer, is_training)
           all_logits.append(net)
           print('after upsampling = ', net)
 
@@ -745,6 +800,7 @@ def create_init_op(params):
 #def jitter(image, labels, weights):
 def jitter(image, labels):
   with tf.name_scope('jitter'), tf.device('/cpu:0'):
+  #with tf.name_scope('jitter'), tf.device('/gpu:0'):
     print('\nJittering enabled')
     global random_flip_tf, resize_width, resize_height
     #random_flip_tf = tf.placeholder(tf.bool, shape=(), name='random_flip')
@@ -752,6 +808,11 @@ def jitter(image, labels):
     resize_width = tf.placeholder(tf.int32, shape=(), name='resize_width')
     resize_height = tf.placeholder(tf.int32, shape=(), name='resize_height')
     
+    #TODO speed the same
+    #image = tf.cond(random_flip_tf[0],
+    #    lambda: tf.map_fn(lambda img: tf.image.random_flip_left_right(img), image),
+    #    lambda: image)
+
     #image_split = tf.unstack(image, axis=0)
     #labels_split = tf.unstack(labels, axis=0)
     #weights_split = tf.unstack(weights, axis=0)
@@ -810,6 +871,24 @@ def _get_train_feed():
   feed_dict = {random_flip_tf:random_flip, resize_width:width, resize_height:height}
   return feed_dict
 
+def build_test():
+  is_training = False
+  #is_training = True
+  reuse = False
+  dataset = valid_dataset
+
+  with tf.variable_scope('', reuse=reuse):
+    x, labels, num_labels, class_hist, depth, img_names = \
+      reader.inputs(dataset, is_training=is_training)
+      #reader.inputs(dataset, is_training=is_training, num_epochs=FLAGS.max_epochs)
+
+    x = normalize_input(x)
+
+    #logits = _build(x, depth, is_training)
+    #total_loss = _loss(logits, labels, weights, is_training)
+    #logits, mid_logits = _build(x, is_training)
+    #x = tf.ones([12, 3, 448, 1024], tf.float32)
+    return _build_test(x, is_training)
 
 def build(mode):
   if mode == 'train':
@@ -835,6 +914,7 @@ def build(mode):
     #total_loss = _loss(logits, labels, weights, is_training)
     #logits, mid_logits = _build(x, is_training)
     logits, aux_logits = _build(x, is_training)
+    #total_loss = _multiloss(logits, aux_logits, labels, class_hist, num_labels, is_training)
     total_loss = _multiloss(logits, aux_logits, labels, class_hist, num_labels, is_training)
 
     if is_training and imagenet_init:
@@ -870,14 +950,24 @@ def _multiloss(logits, aux_logits, labels, num_labels, class_hist, is_training):
   max_weight = FLAGS.max_weight
   xent_loss = 0
   #main_wgt = 0.6
-  main_wgt = 0.7
-  aux_wgt = (1 - main_wgt) / len(aux_logits)
-  xent_loss = main_wgt * losses.weighted_cross_entropy_loss(
-      logits, labels, class_hist, max_weight=max_weight)
-  for i, l in enumerate(aux_logits):
-    print('loss' + str(i), ' --> ' , l)
-    xent_loss += aux_wgt * losses.weighted_cross_entropy_loss(
-      l, labels, class_hist, max_weight=max_weight)
+  if len(aux_logits) > 0:
+    main_wgt = 0.7
+    aux_wgt = (1 - main_wgt) / len(aux_logits)
+  else:
+    main_wgt = 1.0
+    aux_wgt = 0
+  with tf.device(gpu1):
+    # TODO add focal loss
+    # xent_loss = main_wgt * losses.weighted_cross_entropy_loss(
+    #     logits, labels, class_hist, max_weight=max_weight)
+    # for i, l in enumerate(aux_logits):
+    #   print('loss' + str(i), ' --> ' , l)
+    #   xent_loss += aux_wgt * losses.weighted_cross_entropy_loss(
+    #     l, labels, class_hist, max_weight=max_weight)
+    xent_loss = main_wgt * losses.cross_entropy_loss(logits, labels)
+    for i, l in enumerate(aux_logits):
+      print('loss' + str(i), ' --> ' , l)
+      xent_loss += aux_wgt * losses.cross_entropy_loss(l, labels)
 
   all_losses = [xent_loss]
   # get losses + regularization
@@ -929,11 +1019,10 @@ def minimize(loss, global_step, num_batches):
   #base_lr = 1e-2 # for sgd
   base_lr = FLAGS.initial_learning_rate
   #TODO
-  #fine_lr_div = 5
-  fine_lr_div = 10
+  fine_lr_div = FLAGS.fine_tune_lr_factor
+  #fine_lr_div = 10
   #fine_lr_div = 7
   print('LR = ', base_lr)
-  print('fine_lr = LR / ', fine_lr_div)
   #lr_fine = tf.train.exponential_decay(base_lr / 10, global_step, decay_steps,
   #lr_fine = tf.train.exponential_decay(base_lr / 20, global_step, decay_steps,
 
@@ -954,6 +1043,7 @@ def minimize(loss, global_step, num_batches):
   tf.summary.scalar('learning_rate', lr)
   # adam works much better here!
   if imagenet_init:
+    print('fine_lr = LR / ', fine_lr_div)
     if FLAGS.optimizer == 'adam':
       print('\nOptimizer = ADAM\n')
       opts = [tf.train.AdamOptimizer(lr_fine), tf.train.AdamOptimizer(lr)]
@@ -964,8 +1054,8 @@ def minimize(loss, global_step, num_batches):
       raise ValueError('unknown optimizer')
     return train_helper.minimize_fine_tune(opts, loss, global_step, 'head')
   else:
-    #opt = tf.train.AdamOptimizer(lr)
-    opt = tf.train.MomentumOptimizer(lr, 0.9)
+    opt = tf.train.AdamOptimizer(lr)
+    #opt = tf.train.MomentumOptimizer(lr, 0.9)
     return train_helper.minimize(opt, loss, global_step)
   #opts = [tf.train.RMSPropOptimizer(lr_fine, momentum=0.9, centered=True),
   #        tf.train.RMSPropOptimizer(lr, momentum=0.9, centered=True)]
@@ -1108,4 +1198,74 @@ def _build_dilated(image, is_training=False):
 #      total_loss = tf.identity(total_loss)
 #
 #  return total_loss
+
+
+def evaluate(name, sess, epoch_num, run_ops, data):
+  loss_val, accuracy, iou, recall, precision = eval_helper.evaluate_segmentation(
+      sess, epoch_num, run_ops, valid_dataset)
+  is_best = False
+  if iou > data['best_iou'][0]:
+    is_best = True
+    data['best_iou'] = [iou, epoch_num]
+  data['iou'] += [iou]
+  data['acc'] += [accuracy]
+  data['loss'] += [loss_val]
+  return is_best
+
+
+def start_epoch(train_data):
+  global train_loss_arr, train_conf_mat
+  train_conf_mat = np.ascontiguousarray(
+      np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64))
+  train_loss_arr = []
+  # TODO
+  #train_data['lr'].append(lr.eval())
+
+
+def end_epoch(train_data):
+  pixacc, iou, _, _, _ = eval_helper.compute_errors(
+      train_conf_mat, 'Train', train_dataset.class_info)
+  is_best = False
+  if len(train_data['iou']) > 0 and iou > max(train_data['iou']):
+    is_best = True
+  train_data['iou'].append(iou)
+  train_data['acc'].append(pixacc)
+  train_loss_val = np.mean(train_loss_arr)
+  train_data['loss'].append(train_loss_val)
+  return is_best
+
+
+def update_stats(ret_val):
+  global train_loss_arr
+  loss_val = ret_val[0]
+  yp = ret_val[1]
+  yt = ret_val[2]
+  train_loss_arr.append(loss_val)
+  yp = yp.argmax(3).astype(np.int32)
+  cylib.collect_confusion_matrix(yp.reshape(-1), yt.reshape(-1), train_conf_mat)
+
+
+def plot_results(train_data, valid_data):
+  eval_helper.plot_training_progress(os.path.join(FLAGS.train_dir, 'stats'),
+                                     train_data, valid_data)
+
+
+def print_results(train_data, valid_data):
+  print('\nBest train IOU = %.2f' % max(train_data['iou']))
+  print('Best validation IOU = %.2f (epoch %d)\n' % tuple(valid_data['best_iou']))
+
+
+def init_eval_data():
+  train_data = {}
+  valid_data = {}
+  train_data['lr'] = []
+  train_data['loss'] = []
+  train_data['iou'] = []
+  train_data['acc'] = []
+  train_data['best_iou'] = [0, 0]
+  valid_data['best_iou'] = [0, 0]
+  valid_data['loss'] = []
+  valid_data['iou'] = []
+  valid_data['acc'] = []
+  return train_data, valid_data
 

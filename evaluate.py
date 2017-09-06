@@ -24,6 +24,11 @@ import datasets.reader as reader
 
 
 tf.app.flags.DEFINE_string('model_dir', '', """Path to experiment dir.""")
+tf.app.flags.DEFINE_string('dataset_dir',
+    '/home/kivan/datasets/Cityscapes/tensorflow/2048x1024/',
+    """Path to experiment dir.""")
+#DATASET_DIR = 
+
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -39,7 +44,7 @@ def evaluate(model, dataset, save_dir):
   #config.operation_timeout_in_ms = 15000   # terminate on long hangs
   sess = tf.Session(config=config)
   # Get images and labels.
-  run_ops = model.build(dataset, is_training=False)
+  run_ops = model.build('validation')
 
   #sess.run(tf.global_variables_initializer())
   sess.run(tf.local_variables_initializer())
@@ -62,7 +67,7 @@ def evaluate(model, dataset, save_dir):
   img_names = []
   for i in trange(dataset.num_examples()):
     #loss_val, out_logits, gt_labels, img_prefix, mid_logits = sess.run(run_ops)
-    out_logits, mid_logits, gt_labels, img_prefix = sess.run(run_ops)
+    loss, out_logits, gt_labels, img_prefix = sess.run(run_ops)
     img_prefix = img_prefix[0].decode("utf-8")
     #loss_avg += loss_val
     #loss_vals += [loss_val]
@@ -70,24 +75,25 @@ def evaluate(model, dataset, save_dir):
     img_names += [img_prefix]
     #net_labels = out_logits[0].argmax(2).astype(np.int32, copy=False)
     net_labels = out_logits[0].argmax(2).astype(np.int32)
-    mid_labels = mid_logits[0].argmax(2).astype(np.int32)
+    #mid_labels = mid_logits[0].argmax(2).astype(np.int32)
     #gt_labels = gt_labels.astype(np.int32, copy=False)
     cylib.collect_confusion_matrix(net_labels.reshape(-1), gt_labels.reshape(-1), conf_mat)
+    print(gt_labels.shape)
     gt_labels = gt_labels.reshape(net_labels.shape)
     pred_labels = np.copy(net_labels)
     net_labels[net_labels == gt_labels] = -1
-    net_labels[gt_labels == -1] = -1
+    net_labels[gt_labels == 19] = -1
     num_mistakes = (net_labels >= 0).sum()
     img_prefix = '%07d_'%num_mistakes + img_prefix
     pred_save_path = os.path.join(save_dir, img_prefix + '.png')
-    eval_helper.draw_output(pred_labels, CityscapesDataset.CLASS_INFO, pred_save_path)
+    eval_helper.draw_output(pred_labels, CityscapesDataset.class_info, pred_save_path)
     pred_save_path = os.path.join(save_dir, img_prefix + '_middle.png')
-    eval_helper.draw_output(mid_labels, CityscapesDataset.CLASS_INFO, pred_save_path)
+    #eval_helper.draw_output(mid_labels, CityscapesDataset.CLASS_INFO, pred_save_path)
     #error_save_path = os.path.join(save_dir, str(loss_val) + img_prefix + '_errors.png')
     #filename =  img_prefix + '_' + str(loss_val) + '_error.png'
     filename =  img_prefix + '_error.png'
     error_save_path = os.path.join(save_dir, filename)
-    eval_helper.draw_output(net_labels, CityscapesDataset.CLASS_INFO, error_save_path)
+    eval_helper.draw_output(net_labels, CityscapesDataset.class_info, error_save_path)
     #print(q_size)
   #print(conf_mat)
   #img_names = [[x,y] for (y,x) in sorted(zip(loss_vals, img_names))]
@@ -106,7 +112,7 @@ def evaluate(model, dataset, save_dir):
   coord.join(threads)
   sess.close()
 
-  return loss_avg / dataset.num_examples(), pixel_acc, iou_acc, recall, precision
+  #return loss_avg / dataset.num_examples(), pixel_acc, iou_acc, recall, precision
 
 
 def main(argv=None):  # pylint: disable=unused-argument

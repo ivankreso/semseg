@@ -2,13 +2,13 @@ import os, re
 import pickle
 import tensorflow as tf
 import numpy as np
-import cv2
+#import cv2
 from os.path import join
 
 import tensorflow.contrib.layers as layers
 from tensorflow.contrib.framework import arg_scope
-import skimage as ski
-import skimage.io
+#import skimage as ski
+#import skimage.io
 
 import libs.cylib as cylib
 import models.resnet.resnet_utils as resnet_utils
@@ -168,7 +168,7 @@ def init_eval_data():
 
 
 def normalize_input(img):
-  with tf.name_scope('input'), tf.device('/cpu:0'):
+  with tf.name_scope('input'):
     r, g, b = tf.split(img, 3, axis=maps_dim)
     img = tf.concat([b, g, r], maps_dim)
     return img - data_mean
@@ -313,23 +313,21 @@ def _build(image, is_training=False):
   #skip_layers.append([tf.nn.relu(l), km//2, 'group0', depth])
   skip_layers.append([tf.nn.relu(l), up_sizes[0], 'block0_refine'])
   l = layer(l, 'group1', 128, defs[1], 2)
-  #skip_layers.append([tf.nn.relu(l), km//2, 'group1', depth])
-  skip_layers.append([tf.nn.relu(l), up_sizes[1], 'block1_refine'])
 
   #bsz = 2
   #paddings, crops = tf.required_space_to_batch_paddings(tf.shape(l)[1:3], [bsz, bsz])
   #l = tf.space_to_batch(l, paddings=paddings, block_size=bsz)
   #l = layer(l, 'group2', 256, defs[2], 1)
   #l = tf.batch_to_space(l, crops=crops, block_size=bsz)
+  skip_layers.append([tf.nn.relu(l), up_sizes[1], 'block1_refine'])
   l = layer(l, 'group2', 256, defs[2], 2)
-  #skip_layers.append([tf.nn.relu(l), km, 'group2', depth])
-  skip_layers.append([tf.nn.relu(l), up_sizes[2], 'block2_refine'])
 
   #bsz = 4
   #paddings, crops = tf.required_space_to_batch_paddings(tf.shape(l)[1:3], [bsz, bsz])
   #l = tf.space_to_batch(l, paddings=paddings, block_size=bsz)
   #l = layer(l, 'group3', 512, defs[3], 1)
-  #l = tf.batch_to_space(l, crops=crops, block_size=bsz)
+  #net = tf.batch_to_space(l, crops=crops, block_size=bsz)
+  skip_layers.append([tf.nn.relu(l), up_sizes[2], 'block2_refine'])
   net = layer(l, 'group3', 512, defs[3], 2)
   #skip_layers.append([tf.nn.relu(l), km, 'group3', depth])
   print('resnet:', net)
@@ -341,7 +339,7 @@ def _build(image, is_training=False):
         weights_initializer=init_func,
         weights_regularizer=layers.l2_regularizer(weight_decay)):
 
-      l = tf.nn.relu(l)
+      net = tf.nn.relu(net)
       #bsz = 2
       #paddings, crops = tf.required_space_to_batch_paddings(image_size(net), [bsz, bsz])
       #net = tf.space_to_batch(net, paddings=paddings, block_size=bsz)
@@ -354,7 +352,7 @@ def _build(image, is_training=False):
       #l = layers.conv2d(l, context_size, kernel_size=3, rate=4, scope='conv2')
       #l = _pyramid_pooling(l, size=4)
       #l = _pyramid_pooling(l, size=2)
-      logits_mid = net
+
       #final_h = l.get_shape().as_list()[1]
       #if final_h >= 10:
       #  skip_layers.append([l, km, 'head', depth])
@@ -366,18 +364,25 @@ def _build(image, is_training=False):
       #else:
       #  l = layers.conv2d(l, context_size, kernel_size=3, scope='conv2')
 
+    #logits_mid = None
+    logits_mid = net
     print('Before upsampling: ', net)
     for skip_layer in reversed(skip_layers):
       net = refine(net, skip_layer)
 
-    logits_mid = layers.conv2d(logits_mid, FLAGS.num_classes, 1, weights_initializer=init_func,
-                               activation_fn=None, scope='logits_mid')
     logits = layers.conv2d(net, FLAGS.num_classes, 1, weights_initializer=init_func,
                            activation_fn=None, scope='logits')
     input_shape = tf.shape(image)[1:3]
-    logits_mid = tf.image.resize_bilinear(logits_mid, input_shape, name='resize_logits_mid')
+
+    if logits_mid is not None:
+      logits_mid = layers.conv2d(logits_mid, FLAGS.num_classes, 1, weights_initializer=init_func,
+                                 activation_fn=None, scope='logits_mid')
+      logits_mid = tf.image.resize_bilinear(logits_mid, input_shape, name='resize_logits_mid')
+      aux_logits = [logits_mid]
+    else:
+      aux_logits = []
     logits = tf.image.resize_bilinear(logits, input_shape, name='resize_logits')
-    return logits, [logits_mid]
+    return logits, aux_logits
 
 
 def _pyramid_pooling(net, size=3):
@@ -576,8 +581,12 @@ def _multiloss(logits, aux_logits, labels, num_labels, class_hist, is_training):
   max_weight = FLAGS.max_weight
   xent_loss = 0
   #main_wgt = 0.6
-  main_wgt = 0.7
-  aux_wgt = (1 - main_wgt) / len(aux_logits)
+  if len(aux_logits) > 0:
+    main_wgt = 0.7
+    aux_wgt = (1 - main_wgt) / len(aux_logits)
+  else:
+    main_wgt = 1.0
+    aux_wgt = 0
   xent_loss = main_wgt * losses.weighted_cross_entropy_loss(
       logits, labels, class_hist, max_weight=max_weight)
   for i, l in enumerate(aux_logits):
@@ -670,8 +679,8 @@ def minimize(loss, global_step, num_batches):
       raise ValueError('unknown optimizer')
     return train_helper.minimize_fine_tune(opts, loss, global_step, 'head')
   else:
-    #opt = tf.train.AdamOptimizer(lr)
-    opt = tf.train.MomentumOptimizer(lr, 0.9)
+    opt = tf.train.AdamOptimizer(lr)
+    #opt = tf.train.MomentumOptimizer(lr, 0.9)
     return train_helper.minimize(opt, loss, global_step)
   #opts = [tf.train.RMSPropOptimizer(lr_fine, momentum=0.9, centered=True),
   #        tf.train.RMSPropOptimizer(lr, momentum=0.9, centered=True)]

@@ -5,12 +5,13 @@ import pickle
 
 import numpy as np
 import matplotlib
+import PIL.Image as pimg
 #matplotlib.use('TkAgg')
 #matplotlib.use('Agg')
 #import matplotlib.pyplot as plt
-import skimage as ski
-import skimage.io
-import cv2
+#import skimage as ski
+#import skimage.io
+#import cv2
 import libs.cylib as cylib
 from os.path import join
 
@@ -41,27 +42,24 @@ def save_for_evaluation(pred_img, img_names, save_dir):
     #print(path)
     cv2.imwrite(path, eval_img[i])
 
-def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=None):
-  #run_cityscapes_script = False
-  run_cityscapes_script = True
+def evaluate_segmentation(sess, epoch_num, run_ops, dataset, get_feed_dict=None):
+  run_cityscapes_script = False
+  #run_cityscapes_script = True
   print('\nValidation performance:')
   conf_mat = np.ascontiguousarray(
       np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64))
   loss_avg = 0
   save_dir = join(FLAGS.train_dir, 'results')
   print('Saving results in: ', save_dir)
-  for step in range(num_examples):
+  num_batches = dataset.num_examples() // FLAGS.batch_size_valid
+  duration = 0
+  for step in range(num_batches):
     start_time = time.time()
-    if len(run_ops) == 4:
-      if get_feed_dict != None:
-        loss_val, logits, labels, img_names = sess.run(run_ops, feed_dict=get_feed_dict())
-      else:
-        loss_val, logits, labels, img_names = sess.run(run_ops)
-    elif len(run_ops) == 5:
-      loss_val, logits, labels, img_names, logits_mid = sess.run(run_ops)
+    if get_feed_dict != None:
+      loss_val, logits, labels, img_names = sess.run(run_ops, feed_dict=get_feed_dict())
     else:
-      raise ValueError()
-    duration = time.time() - start_time
+      loss_val, logits, labels, img_names = sess.run(run_ops)
+    duration += time.time() - start_time
     loss_avg += loss_val
     #net_labels = out_logits[0].argmax(2).astype(np.int32, copy=False)
     #net_labels = logits[0].argmax(2).astype(np.int32)
@@ -74,41 +72,39 @@ def evaluate_segmentation(sess, epoch_num, run_ops, num_examples, get_feed_dict=
                                    labels.reshape(-1), conf_mat)
 
     if step % 50 == 0:
-      num_examples_per_step = FLAGS.batch_size
-      examples_per_sec = num_examples_per_step / duration
+      examples_per_sec = (step+1) * FLAGS.batch_size_valid / duration
       sec_per_batch = float(duration)
-      format_str = 'epoch %d, step %d / %d, loss = %.2f \
-        (%.1f examples/sec; %.3f sec/batch)'
-      print(format_str % (epoch_num, step, num_examples, loss_val,
-                          examples_per_sec, sec_per_batch))
-    if FLAGS.draw_predictions and step % 20 == 0:
-    #if FLAGS.draw_predictions:
+      format_str = 'epoch %d, step %d / %d, loss = %.2f (%.1f examples/sec)'
+      print(format_str % (epoch_num, step, num_batches, loss_val, examples_per_sec))
+    #if FLAGS.draw_predictions and step % 20 == 0:
+    if FLAGS.draw_predictions:
       for i in range(net_labels.shape[0]):
         img_prefix = img_names[i].decode("utf-8")
         #save_path = FLAGS.debug_dir + '/valid/' + '%03d_' % epoch_num + img_prefix + '.png'
         save_path = FLAGS.debug_dir + '/valid/' + img_prefix + '.png'
-        draw_output(net_labels[i], CityscapesDataset.CLASS_INFO, save_path)
+        draw_output(net_labels[i], CityscapesDataset.class_info, save_path)
         #mid_labels = logits_mid[i].argmax(2).astype(np.int32)
         #save_path = FLAGS.debug_dir + '/valid/' + '%03d_' % epoch_num + img_prefix + '_mid.png'
         #save_path = FLAGS.debug_dir + '/valid/' + img_prefix + '_mid.png'
         #draw_output(mid_labels, CityscapesDataset.CLASS_INFO, save_path)
   #print(conf_mat)
+  print('Avg time per image = ', dataset.num_examples() / duration)
   print('')
   pixel_acc, iou_acc, recall, precision, _ = compute_errors(
-      conf_mat, 'Validation', CityscapesDataset.CLASS_INFO, verbose=True)
+      conf_mat, 'Validation', CityscapesDataset.class_info, verbose=True)
   script_path = ('/home/kivan/source/forks/cityscapesScripts/cityscapesscripts/'
                  'evaluation/evalPixelLevelSemanticLabeling.py ')
-  #gt_dir = '/home/kivan/datasets/Cityscapes/tensorflow/640x272/GT/val/label/'
-  gt_dir = join(FLAGS.dataset_dir, 'GT', 'val', 'label')
-  #subprocess.run([script_path, gt_dir, save_dir], stdout=subprocess.PIPE)
   if run_cityscapes_script:
+    #gt_dir = '/home/kivan/datasets/Cityscapes/tensorflow/640x272/GT/val/label/'
+    gt_dir = join(FLAGS.dataset_dir, 'GT', 'val', 'label')
+    #subprocess.run([script_path, gt_dir, save_dir], stdout=subprocess.PIPE)
     global proc_status
     if proc_status != None:
       proc_status.wait()
     print('Running Cityscapes evaluation script..')
     cmd = script_path + gt_dir + ' ' + save_dir
     proc_status = subprocess.Popen(cmd, shell=True)
-  return loss_avg / num_examples, pixel_acc, iou_acc, recall, precision
+  return loss_avg / num_batches, pixel_acc, iou_acc, recall, precision
 
 
 def evaluate_segmentation_voc2012(sess, epoch_num, run_ops, dataset, get_feed_dict=None):
@@ -141,7 +137,7 @@ def evaluate_segmentation_voc2012(sess, epoch_num, run_ops, dataset, get_feed_di
         img_prefix = img_names[i].decode("utf-8")
         #save_path = FLAGS.debug_dir + '/valid/' + '%03d_' % epoch_num + img_prefix + '.png'
         save_path = FLAGS.debug_dir + '/valid/' + img_prefix + '.png'
-        draw_output(net_labels[i], CityscapesDataset.CLASS_INFO, save_path)
+        draw_output(net_labels[i], CityscapesDataset.class_info, save_path)
         #mid_labels = logits_mid[i].argmax(2).astype(np.int32)
         #save_path = FLAGS.debug_dir + '/valid/' + '%03d_' % epoch_num + img_prefix + '_mid.png'
         #save_path = FLAGS.debug_dir + '/valid/' + img_prefix + '_mid.png'
@@ -214,7 +210,9 @@ def draw_output(y, class_colors, save_path=None):
     #y_rgb[np.repeat(np.equal(y, cid).reshape((height, width, 1)), 3, axis=2)].reshape((-1, 3)) = \
     #    class_colors[cid][:3]
   if save_path:
-    ski.io.imsave(save_path, y_rgb)
+    image = pimg.fromarray(y_rgb)
+    image.save(save_path)
+    #ski.io.imsave(save_path, y_rgb)
   return y_rgb
 
 
