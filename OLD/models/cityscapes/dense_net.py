@@ -11,7 +11,7 @@ from tensorflow.contrib.framework import arg_scope
 #import skimage.io
 
 import libs.cylib as cylib
-import utils
+import train_helper
 import losses
 import eval_helper
 #import datasets.reader_rgb as reader
@@ -53,7 +53,7 @@ block_sizes = [6,12,24,16]
 #bottleneck = False
 
 imagenet_init = True
-# imagenet_init = False
+#imagenet_init = False
 init_dir = '/home/kivan/datasets/pretrained/dense_net/'
 #apply_jitter = True
 apply_jitter = False
@@ -207,15 +207,7 @@ def _build(image, is_training=False):
       #net = dense_block(net, 8, growth, 'block4', is_training)
       #net = BNReluConv(net, 256, 'bottleneck2', k=1)
       #net = dense_block_context(net)
-      print('Before upsampling: ', net)
-      all_logits = [net]
-      for skip_layer in reversed(skip_layers):
-        net = refine(net, skip_layer, is_training)
-        all_logits.append(net)
-        print('after upsampling = ', net)
-      all_logits = [all_logits[0], all_logits[-1]]
-      # TODO
-      all_logits = [net]
+      print(net)
 
       #net = BNReluConv(net, 256, 'bottleneck', k=1)
       ##net = _pyramid_pooling(net, 256, num_pools=4)
@@ -254,8 +246,18 @@ def _build(image, is_training=False):
       #net.set_shape(in_shape)
       #net = BNReluConv(net, context_size, 'context_conv', k=5)
       #final_h = net.get_shape().as_list()[height_dim]
+      print('Before upsampling: ', net)
+
+      all_logits = [net]
+      for skip_layer in reversed(skip_layers):
+        net = refine(net, skip_layer, is_training)
+        all_logits.append(net)
+        print('after upsampling = ', net)
+      all_logits = [all_logits[0], all_logits[-1]]
       
-    
+
+  # TODO
+  all_logits = [net]
   with tf.variable_scope('head'):
     for i, logits in enumerate(all_logits):
       with tf.variable_scope('logits_'+str(i)):
@@ -905,6 +907,7 @@ def build(mode):
 
     if is_training and apply_jitter:
       x, labels = jitter(x, labels)
+    image = x
     x = normalize_input(x)
 
     #logits = _build(x, depth, is_training)
@@ -954,16 +957,17 @@ def _multiloss(logits, aux_logits, labels, num_labels, class_hist, is_training):
     main_wgt = 1.0
     aux_wgt = 0
   with tf.device(gpu1):
-    xent_loss = main_wgt * losses.weighted_cross_entropy_loss(
-        logits, labels, class_hist, max_weight=max_weight)
-    for i, l in enumerate(aux_logits):
-      print('loss' + str(i), ' --> ' , l)
-      xent_loss += aux_wgt * losses.weighted_cross_entropy_loss(
-        l, labels, class_hist, max_weight=max_weight)
-    # xent_loss = main_wgt * losses.cross_entropy_loss(logits, labels)
+    # TODO add focal loss
+    # xent_loss = main_wgt * losses.weighted_cross_entropy_loss(
+    #     logits, labels, class_hist, max_weight=max_weight)
     # for i, l in enumerate(aux_logits):
     #   print('loss' + str(i), ' --> ' , l)
-    #   xent_loss += aux_wgt * losses.cross_entropy_loss(l, labels)
+    #   xent_loss += aux_wgt * losses.weighted_cross_entropy_loss(
+    #     l, labels, class_hist, max_weight=max_weight)
+    xent_loss = main_wgt * losses.cross_entropy_loss(logits, labels)
+    for i, l in enumerate(aux_logits):
+      print('loss' + str(i), ' --> ' , l)
+      xent_loss += aux_wgt * losses.cross_entropy_loss(l, labels)
 
   all_losses = [xent_loss]
   # get losses + regularization
@@ -1023,8 +1027,8 @@ def minimize(loss, global_step, num_batches):
   #lr_fine = tf.train.exponential_decay(base_lr / 20, global_step, decay_steps,
 
   #decay_steps = int(num_batches * 30)
-  decay_steps = num_batches * FLAGS.max_num_epochs
-  #decay_steps = FLAGS.num_iters
+  #decay_steps = num_batches * FLAGS.max_epochs
+  decay_steps = FLAGS.num_iters
   lr_fine = tf.train.polynomial_decay(base_lr / fine_lr_div, global_step, decay_steps,
                                       end_learning_rate=0, power=FLAGS.decay_power)
   lr = tf.train.polynomial_decay(base_lr, global_step, decay_steps,
@@ -1048,11 +1052,11 @@ def minimize(loss, global_step, num_batches):
       opts = [tf.train.MomentumOptimizer(lr_fine, 0.9), tf.train.MomentumOptimizer(lr, 0.9)]
     else:
       raise ValueError('unknown optimizer')
-    return utils.minimize_fine_tune(opts, loss, global_step, 'head')
+    return train_helper.minimize_fine_tune(opts, loss, global_step, 'head')
   else:
     opt = tf.train.AdamOptimizer(lr)
     #opt = tf.train.MomentumOptimizer(lr, 0.9)
-    return utils.minimize(opt, loss, global_step)
+    return train_helper.minimize(opt, loss, global_step)
   #opts = [tf.train.RMSPropOptimizer(lr_fine, momentum=0.9, centered=True),
   #        tf.train.RMSPropOptimizer(lr, momentum=0.9, centered=True)]
   #opts = [tf.train.MomentumOptimizer(lr_fine, 0.9), tf.train.MomentumOptimizer(lr, 0.9)]
@@ -1215,7 +1219,6 @@ def start_epoch(train_data):
       np.zeros((FLAGS.num_classes, FLAGS.num_classes), dtype=np.uint64))
   train_loss_arr = []
   # TODO
-  print('LR = ', lr.eval())
   #train_data['lr'].append(lr.eval())
 
 

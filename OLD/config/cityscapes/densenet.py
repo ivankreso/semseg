@@ -1,6 +1,6 @@
 import os
 import tensorflow as tf
-import utils
+import train_helper
 
 MODEL_PATH = './models/cityscapes/dense_net.py'
 #MODEL_PATH = './models/cityscapes/dense_net_multiplexer.py'
@@ -10,27 +10,24 @@ MODEL_PATH = './models/cityscapes/dense_net.py'
 #MODEL_PATH = './models/cityscapes/dense_net_dilated.py'
 
 #IMG_WIDTH, IMG_HEIGHT = 2048, 1024
-# IMG_WIDTH, IMG_HEIGHT = 1024, 448
-IMG_WIDTH, IMG_HEIGHT = 768, 320
+IMG_WIDTH, IMG_HEIGHT = 1024, 448
+# IMG_WIDTH, IMG_HEIGHT = 768, 320
 
 SAVE_DIR = os.path.join('/home/kivan/datasets/results/tmp/cityscapes',
-                        utils.get_time_string())
+                        train_helper.get_time_string())
 
 # SPP has 90K
 
 #tf.app.flags.DEFINE_integer('num_iters', 40000, '')
-# tf.app.flags.DEFINE_integer('num_iters', 30000, '')
+tf.app.flags.DEFINE_integer('num_iters', 30000, '')
 #tf.app.flags.DEFINE_integer('num_iters', 20000, '')
 #tf.app.flags.DEFINE_integer('num_iters', 60000, '')
 tf.app.flags.DEFINE_integer('max_num_epochs', 30, 'Number of epochs to run.')
 
 ###tf.app.flags.DEFINE_integer('num_iters', 20000, '')
-
-# tf.app.flags.DEFINE_string('optimizer', 'adam', '')
-# tf.app.flags.DEFINE_float('decay_power', 1.5, '')
-# tf.app.flags.DEFINE_float('initial_learning_rate', 5e-4, '')
-
-
+tf.app.flags.DEFINE_string('optimizer', 'adam', '')
+tf.app.flags.DEFINE_float('decay_power', 1.5, '')
+tf.app.flags.DEFINE_float('initial_learning_rate', 5e-4, '')
 ###tf.app.flags.DEFINE_float('decay_power', 1.4, '')
 ###tf.app.flags.DEFINE_float('decay_power', 1.0, '') # 2% worse!
 ##tf.app.flags.DEFINE_integer('fine_tune_lr_factor', 10, '')
@@ -42,9 +39,9 @@ tf.app.flags.DEFINE_integer('max_num_epochs', 30, 'Number of epochs to run.')
 tf.app.flags.DEFINE_integer('fine_tune_lr_factor', 2, '')
 #tf.app.flags.DEFINE_integer('fine_tune_lr_factor', 5, '')
 
-tf.app.flags.DEFINE_string('optimizer', 'momentum', '')
-tf.app.flags.DEFINE_float('decay_power', 0.9, '')
-tf.app.flags.DEFINE_float('initial_learning_rate', 3e-2, '')
+#tf.app.flags.DEFINE_string('optimizer', 'momentum', '')
+#tf.app.flags.DEFINE_float('decay_power', 0.9, '')
+#tf.app.flags.DEFINE_float('initial_learning_rate', 3e-2, '')
 
 tf.app.flags.DEFINE_integer('seed', -1, '')
 #tf.app.flags.DEFINE_integer('seed', 3141, '')

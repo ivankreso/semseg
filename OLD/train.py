@@ -9,14 +9,15 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import timeline
 
-import utils
+import helper
+import train_helper
 
 np.set_printoptions(linewidth=250)
 
 tf.app.flags.DEFINE_string('config_path', '', """Path to experiment config.""")
 FLAGS = tf.app.flags.FLAGS
 
-utils.import_module('config', FLAGS.config_path)
+helper.import_module('config', FLAGS.config_path)
 print(FLAGS.config_path)
 
 
@@ -43,7 +44,7 @@ def train(model):
 
     # Build a Graph that computes the logits predictions from the inference model.
     train_ops, init_op, init_feed = model.build('train')
-    num_params = utils.get_num_params()
+    num_params = train_helper.get_num_params()
     vars_to_restore = tf.contrib.framework.get_variables_to_restore()
     if FLAGS.no_valid is False:
       valid_ops = model.build('validation')
@@ -104,9 +105,9 @@ def train(model):
     #summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, graph=sess.graph)
     #TODO tf.summary.FileWriter()
 
-    #init_vars = utils.get_variables(sess)
-    #utils.print_variable_diff(sess, init_vars)
-    #variable_map = utils.get_variable_map()
+    #init_vars = train_helper.get_variables(sess)
+    #train_helper.print_variable_diff(sess, init_vars)
+    #variable_map = train_helper.get_variable_map()
     # take the train loss moving average
     #loss_avg_train = variable_map['total_loss/avg:0']
     print('Training network...\nModel saving =', FLAGS.save_net)
@@ -142,7 +143,7 @@ def train(model):
           loss_val = ret_val[0]
           #if step % 100 == 0:
           #  model.evaluate_output(ret_val, step)
-          #utils.print_grad_stats(grads_val, grad_tensors)
+          #train_helper.print_grad_stats(grads_val, grad_tensors)
           #if step > 20:
           #  run_metadata = tf.RunMetadata()
           #  ret_val = sess.run(run_ops, options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
@@ -168,15 +169,14 @@ def train(model):
           examples_per_sec = (step+1)*FLAGS.batch_size / duration
           #sec_per_batch = float(duration)
 
-          format_str = '%s: epoch %03d / %03d, step %04d / %04d, iter %06d / %06d, loss = %.2f \
+          format_str = '%s: epoch %03d, step %04d / %04d, iter %06d / %06d, loss = %.2f \
             (%.1f examples/sec)'
           #print('lr = ', clr)
-          num_iters = FLAGS.max_num_epochs * model.num_batches()
-          print(format_str % (utils.get_expired_time(ex_start_time), epoch_num, FLAGS.max_num_epochs,
-                              step, model.num_batches(), iter_num, num_iters,
+          print(format_str % (train_helper.get_expired_time(ex_start_time), epoch_num,
+                              step, model.num_batches(), iter_num, FLAGS.num_iters,
                               loss_val, examples_per_sec))
       is_best = model.end_epoch(train_data)
-      #utils.print_variable_diff(sess, init_vars)
+      #train_helper.print_variable_diff(sess, init_vars)
       if FLAGS.no_valid is False:
         is_best = model.evaluate('valid', sess, epoch_num, valid_ops, valid_data)
 
@@ -201,7 +201,7 @@ def train(model):
 
 
 def main(argv=None):  # pylint: disable=unused-argument
-  model = utils.import_module('model', FLAGS.model_path)
+  model = helper.import_module('model', FLAGS.model_path)
 
   if tf.gfile.Exists(FLAGS.train_dir):
     raise ValueError('Train dir exists: ' + FLAGS.train_dir)
@@ -213,7 +213,7 @@ def main(argv=None):  # pylint: disable=unused-argument
   tf.gfile.MakeDirs(join(FLAGS.debug_dir, 'valid'))
   tf.gfile.MakeDirs(join(FLAGS.train_dir, 'results'))
   f = open(join(stats_dir, 'log.txt'), 'w')
-  sys.stdout = utils.Logger(sys.stdout, f)
+  sys.stdout = train_helper.Logger(sys.stdout, f)
 
   copyfile(FLAGS.model_path, os.path.join(FLAGS.train_dir, 'model.py'))
   copyfile(FLAGS.config_path, os.path.join(FLAGS.train_dir, 'config.py'))
