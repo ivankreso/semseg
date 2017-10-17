@@ -26,9 +26,10 @@ tf.app.flags.DEFINE_integer('max_num_epochs', 30, 'Number of epochs to run.')
 
 ###tf.app.flags.DEFINE_integer('num_iters', 20000, '')
 
-# tf.app.flags.DEFINE_string('optimizer', 'adam', '')
-# tf.app.flags.DEFINE_float('decay_power', 1.5, '')
-# tf.app.flags.DEFINE_float('initial_learning_rate', 5e-4, '')
+tf.app.flags.DEFINE_string('optimizer', 'adam', '')
+tf.app.flags.DEFINE_float('decay_power', 1.5, '')
+tf.app.flags.DEFINE_float('initial_learning_rate', 5e-4, '')
+tf.app.flags.DEFINE_float('end_learning_rate', 5e-5, '')
 
 
 ###tf.app.flags.DEFINE_float('decay_power', 1.4, '')
@@ -42,9 +43,9 @@ tf.app.flags.DEFINE_integer('max_num_epochs', 30, 'Number of epochs to run.')
 tf.app.flags.DEFINE_integer('fine_tune_lr_factor', 2, '')
 #tf.app.flags.DEFINE_integer('fine_tune_lr_factor', 5, '')
 
-tf.app.flags.DEFINE_string('optimizer', 'momentum', '')
-tf.app.flags.DEFINE_float('decay_power', 0.9, '')
-tf.app.flags.DEFINE_float('initial_learning_rate', 3e-2, '')
+# tf.app.flags.DEFINE_string('optimizer', 'momentum', '')
+# tf.app.flags.DEFINE_float('decay_power', 0.9, '')
+# tf.app.flags.DEFINE_float('initial_learning_rate', 3e-2, '')
 
 tf.app.flags.DEFINE_integer('seed', -1, '')
 #tf.app.flags.DEFINE_integer('seed', 3141, '')

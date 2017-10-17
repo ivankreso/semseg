@@ -55,8 +55,8 @@ block_sizes = [6,12,24,16]
 imagenet_init = True
 # imagenet_init = False
 init_dir = '/home/kivan/datasets/pretrained/dense_net/'
-#apply_jitter = True
-apply_jitter = False
+apply_jitter = True
+# apply_jitter = False
 jitter_scale = False
 #jitter_scale = True
 pool_func = layers.avg_pool2d
@@ -192,7 +192,6 @@ def _build(image, is_training=False):
 
     #net, skip = dense_block(net, block_sizes[3], growth, 'block3', is_training,
     #                        split=True, rate=2)
-
     
     with tf.variable_scope('head'):
       print('out = ', net)
@@ -1026,9 +1025,11 @@ def minimize(loss, global_step, num_batches):
   decay_steps = num_batches * FLAGS.max_num_epochs
   #decay_steps = FLAGS.num_iters
   lr_fine = tf.train.polynomial_decay(base_lr / fine_lr_div, global_step, decay_steps,
-                                      end_learning_rate=0, power=FLAGS.decay_power)
+                                      end_learning_rate=FLAGS.end_learning_rate,
+                                      power=FLAGS.decay_power)
   lr = tf.train.polynomial_decay(base_lr, global_step, decay_steps,
-                                 end_learning_rate=0, power=FLAGS.decay_power)
+                                 end_learning_rate=FLAGS.end_learning_rate,
+                                 power=FLAGS.decay_power)
   #lr = tf.Print(lr, [lr], message='lr = ', summarize=10)
 
   #stairs = True
@@ -1063,7 +1064,8 @@ def train_step(sess, run_ops):
   global train_step_iter
   if apply_jitter:
     feed_dict = _get_train_feed()
-    vals = sess.run(run_ops, feed_dict=feed_dict)
+    # vals = sess.run(run_ops, feed_dict=feed_dict)
+    vals = sess.run(run_ops + [codes], feed_dict=feed_dict)
   else:
     vals = sess.run(run_ops)
   train_step_iter += 1
